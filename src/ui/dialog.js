@@ -42,7 +42,7 @@ export function openDialog({
   const card = backdrop.querySelector('.orvexa-modal');
   const bodyRoot = backdrop.querySelector('.orvexa-modal-body');
   if (typeof body === 'string') bodyRoot.innerHTML = body;
-  else if (body instanceof Node) bodyRoot.append(body);
+  else if (body && typeof body === 'object' && (body.nodeType === 1 || body.nodeType === 11)) bodyRoot.append(body);
   else if (body) throw new TypeError('Dialog body must be an HTML string or a Node.');
 
   const previouslyFocused = doc.activeElement;
@@ -68,7 +68,8 @@ export function openDialog({
 
   backdrop.querySelector('[data-dialog-close]')?.addEventListener('click', () => close(null));
   backdrop.addEventListener('mousedown', (event) => { if (event.target === backdrop) close(null); });
-  releaseTrap = createFocusTrap(card, { onEscape: () => close(null), documentRef: doc });
+  const firstBodyControl = bodyRoot.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])');
+  releaseTrap = createFocusTrap(card, { onEscape: () => close(null), initialFocus: firstBodyControl || undefined, documentRef: doc });
 
   try {
     onMount?.({ root: bodyRoot, card, close, doc });
@@ -132,8 +133,8 @@ export function askText({
       resolve(raw);
     };
     dialog.body.querySelector('[data-text-form]')?.addEventListener('submit', (event) => { event.preventDefault(); submit(); });
-    dialog.body.querySelector('[data-form-submit]')?.addEventListener('click', submit);
-    dialog.body.querySelector('[data-form-cancel]')?.addEventListener('click', () => dialog.close());
+    dialog.card.querySelector('[data-form-submit]')?.addEventListener('click', submit);
+    dialog.card.querySelector('[data-form-cancel]')?.addEventListener('click', () => dialog.close());
     input?.addEventListener('input', () => { if (error) error.hidden = true; });
     setTimeout(() => { input?.focus(); input?.select(); }, 30);
   });
@@ -159,8 +160,8 @@ export function askConfirm({
       footer: `<button type="button" class="button secondary" data-form-cancel>${escapeHtml(cancelLabel)}</button><button type="button" class="button ${danger ? 'danger' : 'primary'}" data-form-submit>${escapeHtml(confirmLabel)}</button>`,
       onClose: () => finish(false),
     });
-    dialog.body.querySelector('[data-form-submit]')?.addEventListener('click', () => { settled = true; dialog.close(); resolve(true); });
-    dialog.body.querySelector('[data-form-cancel]')?.addEventListener('click', () => { finish(false); dialog.close(); });
+    dialog.card.querySelector('[data-form-submit]')?.addEventListener('click', () => { settled = true; dialog.close(); resolve(true); });
+    dialog.card.querySelector('[data-form-cancel]')?.addEventListener('click', () => { finish(false); dialog.close(); });
   });
 }
 

@@ -132,8 +132,9 @@ New pure, injectable, test-covered modules:
   hazards, TODOs, size/duplication, accessibility hints, score/grade.
 - [x] `src/studio/projectSearch.js` — whole-project literal search with
   per-file grouping, line/column, snippets and limits.
-- **Acceptance:** every module has direct unit tests and no DOM dependency
-  except the explicitly DOM-facing UI modules.
+- **Acceptance:** every module has direct unit tests (unit suites for
+  `core/` + `studio/`, jsdom suites for the DOM-facing `ui/` modules) and no
+  DOM dependency outside the UI layer.
 
 ### V10-3 · Premium UI primitives & interaction — `P2`
 - [x] `src/ui/dialog.js` — modal base with focus trap, Esc, backdrop, focus
@@ -245,8 +246,35 @@ New pure, injectable, test-covered modules:
 - Known limits unchanged: synchronous interpreter (no true Stop), browser-held
   AI keys are not fully secret, no in-browser APK compilation, Modeler is a
   separate route with its own compact design tokens.
-- [ ] `PROGRESS.txt` + this file updated with final numbers.
-- [ ] Commit + push to `arena/5a01eb14-orevxa`.
+- [x] `PROGRESS.txt` + this file updated with final numbers.
+- [x] Commit + push to `arena/5a01eb14-orevxa`.
+
+### V10-11 · Direct test coverage for every v10 module — `P1`
+The release gate proved the app worked end-to-end, but a grep of `tests/`
+showed that 10 of the 13 v10 modules had **no direct tests** — they were only
+exercised indirectly by `boot.test.js`. Closed that gap with 12 suites:
+
+- [x] Core unit suites — `core-storage` (14), `core-preferences` (13),
+  `core-shortcuts` (11), `core-search` (7), `core-a11y` (10), `core-errors`
+  (9), `core-pwa` (9): every exported function, every failure path, hostile
+  input, quota/exception handling.
+- [x] Studio suites — `editor-tabs` (11), `project-health` (14),
+  `project-search` (10): tab identity/overflow, audit scoring and namespaced
+  issue ids, literal/regex/case/whole-word search and replacement.
+- [x] DOM suites — `ui-primitives` (14), `ui-dialogs` (9): focus trap, focus
+  restore, Esc/backdrop, `askText`/`askConfirm`, menu keyboard model, palette
+  ranking/recents/`>`/`@` modes, settings sections/reset/actions, health
+  filters/score ring, project-search results and CSV copy.
+- [x] Real defects found and fixed by these tests:
+  - `askText`/`askConfirm` queried their footer buttons inside `dialog.body`,
+    so **Cancel/Confirm were dead buttons** (settings reset, delete flows).
+  - `settingsDialog` bound reset/Done inside `dialog.body` — **reset was dead**;
+    also `onClose` was never declared, silently swallowing close callbacks.
+  - `openDialog` used a bare `Node` global (throws outside a browser) and
+    focused the header close button instead of the first form control.
+- [x] `npm test` → **368/368 passing** (40 files). No source module was
+  weakened to make tests pass; `editorTabs` assertions were corrected to
+  compare values rather than object identity.
 
 ---
 

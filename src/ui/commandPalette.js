@@ -182,7 +182,8 @@ export function openCommandPalette({
       button.setAttribute('aria-selected', String(active));
     });
     input.setAttribute('aria-activedescendant', `orvexaPaletteOption${activeIndex}`);
-    if (scroll) list.querySelector(`[data-palette-index="${activeIndex}"]`)?.scrollIntoView({ block: 'nearest' });
+    const active = scroll ? list.querySelector(`[data-palette-index="${activeIndex}"]`) : null;
+    if (typeof active?.scrollIntoView === 'function') active.scrollIntoView({ block: 'nearest' });
   };
 
   const execute = (index) => {

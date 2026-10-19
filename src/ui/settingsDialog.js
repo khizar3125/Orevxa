@@ -31,6 +31,7 @@ export function openSettingsDialog({
   storage = { localBytes: 0, quota: 0, percent: 0 },
   errorCount = 0,
   aiKeyStored = false,
+  onClose = null,
   documentRef = null,
 } = {}) {
   let current = normalizePreferences(preferences);
@@ -104,7 +105,7 @@ export function openSettingsDialog({
     });
   });
 
-  dialog.body.querySelector('[data-settings-reset]')?.addEventListener('click', async () => {
+  dialog.card.querySelector('[data-settings-reset]')?.addEventListener('click', async () => {
     if (!await askConfirm({ title: 'Reset preferences?', message: 'Theme, accent, editor and accessibility settings return to their defaults. Project files are not touched.', confirmLabel: 'Reset settings', danger: true, documentRef })) return;
     const defaults = normalizePreferences({});
     current = defaults;
@@ -144,7 +145,7 @@ export function openSettingsDialog({
       if (button) button.textContent = text ? 'Copied ✓' : 'Nothing to copy';
     } catch { /* ignore */ }
   });
-  dialog.body.querySelector('[data-dialog-close-ok]')?.addEventListener('click', () => dialog.close());
+  dialog.card.querySelector('[data-dialog-close-ok]')?.addEventListener('click', () => dialog.close());
   activateSection('appearance');
   updateDerivedUi();
 

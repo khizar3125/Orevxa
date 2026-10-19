@@ -77,7 +77,8 @@ export function openProjectSearchDialog({ files = {}, onOpen = null, initialQuer
       button.classList.toggle('active', active);
       button.setAttribute('aria-selected', String(active));
     });
-    if (scroll) resultsRoot.querySelector(`[data-search-result="${activeIndex}"]`)?.scrollIntoView({ block: 'nearest' });
+    const active = scroll ? resultsRoot.querySelector(`[data-search-result="${activeIndex}"]`) : null;
+    if (typeof active?.scrollIntoView === 'function') active.scrollIntoView({ block: 'nearest' });
   };
 
   const openResult = (index) => {

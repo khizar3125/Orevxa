@@ -11,7 +11,7 @@ Continue from "REMAINING" below. Update this file after every phase.
 
 CURRENT STATUS
 --------------
-Phase: V10 COMPLETE — release candidate verified (V10-1 … V10-9)
+Phase: V10 COMPLETE — release verified, test-coverage gap closed (V10-11)
 Version: 10.0.0
 Branch: arena/5a01eb14-orevxa
 Baseline commit: 13bb1b3 (v9 + extracted archive, before upgrade)
@@ -20,12 +20,13 @@ Release commit: see `git log --oneline -1` (v10 upgrade commit)
 VERIFIED RESULTS (last full run)
 --------------------------------
 npm run lint      PASS   66 files checked, 2 heuristic warnings
-npm test          PASS   237/237 tests (28 baseline files + boot + imports)
-npm run build     PASS   30 files, ~1.33 MB raw / ~455 kB gzipped
+npm test          PASS   368/368 tests (40 files: core, studio, UI, boot)
+npm run build     PASS   29 files, ~1.36 MB raw / ~465 kB gzipped
                          Studio first load ~265 kB gzipped (budget 320 kB)
 npm run verify    PASS   78/78 static + live HTTP checks
 npm run package   PASS   release/orvexa-studio-10.0.0.zip + .sha256,
                          re-read from disk and CRC-verified
+                         (3.63 MB, 155 entries, sha256 5c4b1864…)
 
 WHAT SHIPPED
 ------------
@@ -47,15 +48,22 @@ WHAT SHIPPED
        CSP on all three pages, snapshots before destructive replacement
 [x] 8. Docs, 8-step tour (palette/settings/health included), this file
 [x] 9. Final gate green (see verified results above)
-[ ] 10. Final commit + push (run the two commands below)
+[x] 10. Final commit + push (release commit c4072ae on origin)
+[x] 11. Test-coverage close-out: 12 direct suites for every v10 core/studio/UI
+       module; fixed dead dialog footer buttons, settings onClose and
+       openDialog initial focus (see PLAN.md V10-11)
 
 EXACT NEXT COMMANDS
 -------------------
 cd /home/user/Orevxa
-git add -A
-git commit -m "v10: production upgrade — build pipeline, PWA, a11y, verification"
-git push origin arena/5a01eb14-orevxa
-npm run release     # optional: rebuild + verify + regenerate the ZIP
+npm install                       # node_modules is never committed
+npm run check                     # lint + tests + build + verify
+git log --oneline -3              # confirm HEAD is the coverage commit
+git status --short                # must be clean
+# If the sandbox is re-cloned at baseline, recover history with:
+#   git fetch origin arena/5a01eb14-orevxa && git reset --mixed FETCH_HEAD
+# The working tree is the source of truth; origin/arena/5a01eb14-orevxa holds
+# the pushed commits (c4072ae + the V10-11 coverage commit).
 
 REMAINING / OPTIONAL (not blocking release)
 -------------------------------------------
@@ -65,6 +73,8 @@ REMAINING / OPTIONAL (not blocking release)
 - Modeler route keeps its own compact token set (ui.css is not loaded there);
   converting its remaining dialogs would need a shared token layer.
 - Source maps are opt-in: `npm run build -- --sourcemap`.
+- `scrollIntoView` is feature-detected in the palette and project-search list so
+  non-visual DOMs (jsdom, very old WebViews) cannot throw during keyboard nav.
 
 KNOWN LIMITATIONS (do not “fix” with fake UI)
 ---------------------------------------------
