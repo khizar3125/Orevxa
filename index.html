@@ -2,16 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101019" />
-    <meta name="description" content="Orvexa Studio — build with Orvexa RealmScript and explore the playable Aetherfall open world." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#101016" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f1f0f6" media="(prefers-color-scheme: light)" />
+    <meta name="description" content="Orvexa Studio v10 — a local-first creative studio for 3D scenes, games, websites and apps. 24 games, 18 web templates, offline AI agent, accessible editor and installable PWA." />
+    <meta name="application-name" content="Orvexa Studio" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Orvexa" />
+    <meta name="robots" content="index,follow" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; media-src 'self' data: blob: https:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'self' https:" />
+    <meta property="og:title" content="Orvexa Studio — build worlds in your browser" />
+    <meta property="og:description" content="Games, websites, 3D scenes and AI-assisted creation. Local-first, offline-capable, no account required." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
     <title>Orvexa Studio</title>
     <link rel="icon" type="image/svg+xml" href="./orvexa-mark.svg" />
+    <link rel="apple-touch-icon" href="./icons/orvexa-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/ui.css" />
     <link rel="stylesheet" href="./src/studio/aetherfall-game.css" />
   </head>
   <body>
-    <div id="app"><div class="boot-screen"><div class="boot-mark">O</div><p>Preparing Orvexa Studio…</p></div></div>
-    <script type="module" src="/src/main.js"></script>
+    <div id="app">
+      <div class="boot-screen" role="status" aria-live="polite">
+        <div class="boot-mark" aria-hidden="true">O</div>
+        <p>Preparing Orvexa Studio…</p>
+        <small>Loading the local-first creative engine</small>
+      </div>
+    </div>
+    <noscript>
+      <div class="boot-screen"><div class="boot-mark">O</div><p>Orvexa Studio needs JavaScript. Enable it and reload this page.</p></div>
+    </noscript>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>

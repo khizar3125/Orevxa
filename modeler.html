@@ -4,8 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0e16">
-  <meta name="description" content="Orvexa Modeler — mesh modeling, procedural modifiers, sculpting, UV authoring and PBR asset exchange.">
+  <meta name="description" content="Orvexa Modeler v10 — mesh modeling, procedural modifiers, sculpting, UV authoring, PBR materials, Nanite-style LOD and world-asset publishing.">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta property="og:title" content="Orvexa Modeler">
+  <meta property="og:description" content="A focused mesh and asset workshop that publishes directly into the Aetherfall world.">
   <title>Orvexa Modeler</title>
+  <link rel="icon" type="image/svg+xml" href="./orvexa-mark.svg" />
   <link rel="stylesheet" href="./src/modeler.css">
 </head>
 <body>
@@ -172,7 +177,7 @@
               <button id="booleanMeshButton" class="wide-button">Boolean With Other Selected Mesh</button>
               <div id="apexSummary" class="uv-summary">Apex mesh tools ready. Select a mesh to begin.</div>
             </div>
-            <div class="prop-group"><div class="prop-heading">OMEGA MESH SURGERY <span class="mini-tag">v7.0</span></div>
+            <div class="prop-group"><div class="prop-heading">OMEGA MESH SURGERY <span class="mini-tag">v10.0</span></div>
               <p class="muted-note">Catmull-Clark quad subdivision, lathe &amp; geodesic generators, edge-loop bridging, 3D Voronoi fracture with interior UVs, Nanite DAG stats and the Topology Doctor.</p>
               <div class="button-stack"><button id="catmullClarkButton">Catmull-Clark Subdivide</button><button id="geodesicSphereButton">Add Geodesic Sphere</button><button id="latheVaseButton">Lathe Vase (profile revolve)</button><button id="bridgeLoopsButton">Bridge Two Edge Loops (demo)</button><button id="fracture3dButton">3D Voronoi Fracture + Interior UVs</button><button id="naniteDagStatsButton">Nanite Cluster DAG Stats</button><button id="topologyDoctorButton">🩺 Topology Doctor</button></div>
               <div id="omegaMeshSummary" class="uv-summary">Omega mesh surgery ready.</div>
@@ -191,7 +196,7 @@
           </section>
         </div>
         <section class="inspector-page" data-inspector-page="ai" hidden>
-            <div class="prop-group"><div class="prop-heading">🤖 OMNI-AGENT 3.0 <span class="mini-tag">v7.0</span></div>
+            <div class="prop-group"><div class="prop-heading">🤖 OMNI-AGENT 3.0 <span class="mini-tag">v10.0</span></div>
               <p class="muted-note">Describe a model in English, Hindi or Hinglish. The agent generates a runnable project, critiques quality and can erode terrain or preview a turntable sequence right here.</p>
               <label class="wide-field">Agent Prompt<textarea id="modelerAiPrompt" rows="3" placeholder="e.g. ek crystal tower banao golden hour me">ek neon crystal tower banao</textarea></label>
               <div class="button-stack"><button id="modelerAiGenerateButton">🤖 Generate Project Code</button><button id="modelerAiCritiqueButton">📊 Critique Selected Mesh</button><button id="modelerAiTerrainButton">⛰ Erode Terrain (Terrain Lab)</button><button id="modelerAiTurntableButton">🎬 Preview Turntable Sequence</button></div>
@@ -199,7 +204,7 @@
               <div id="modelerSequencePreview" class="node-svg-preview" aria-label="Sequencer timeline preview"></div>
             </div>
           </section>
-        <div class="inspector-footer"><button id="helpButton">Shortcuts & Help</button><span>v7.0 · Omega Modeler</span></div>
+        <div class="inspector-footer"><button id="helpButton">Shortcuts & Help</button><span>v10.0 · Omega Modeler</span></div>
       </aside>
     </main>
     <div class="toast" id="modelerToast" role="status" aria-live="polite"></div>

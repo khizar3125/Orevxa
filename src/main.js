@@ -7,19 +7,33 @@ import {
 } from './studio/project.js';
 import { DOCS, TUTORIALS } from './studio/docs.js';
 import { EXPERIENCE_MODES, GAME_BLUEPRINTS, WEB_APP_TEMPLATES, PREFAB_KITBASH_LIBRARY, ATMOSPHERE_MOODS, VISUAL_UI_BLOCKS, getGameBlueprint, getWebAppTemplate, getPrefabKitbash, getAtmosphereMood, insertVisualUiBlock, autoFixProjectSource, getTemplateMeta, remixTemplate, getTemplateOfTheDay, APP_THEMES, applyAppTheme, movePageCard } from './studio/templates.js';
-import { AI_PROVIDERS, ORVEXA_AI_TOOLS, loadAiConfig, saveAiConfig, buildWizardPrompt, planAutonomousActions, executeOrvexaAgentTurn, synthesizeRichOrvexaProject, critiqueAndEnhanceProject, executeAgentTool, AGENT_STARTER_PROMPTS, getAgentCapabilityMatrix, listAllPromptChips, explainProjectForBeginner, diagnoseRunError, scaffoldProjectV2, createAgentSession, rememberAgentTurn, generateProjectVariations, autoNameProject, suggestTemplateForPrompt } from './studio/aiAgent.js';
+import { AI_PROVIDERS, ORVEXA_AI_TOOLS, loadAiConfig, saveAiConfig, loadAiConfigSecure, saveAiConfigSecure, forgetStoredAiKey, aiKeyStatus, validateAiEndpoint, buildWizardPrompt, planAutonomousActions, executeOrvexaAgentTurn, synthesizeRichOrvexaProject, critiqueAndEnhanceProject, executeAgentTool, AGENT_STARTER_PROMPTS, getAgentCapabilityMatrix, listAllPromptChips, explainProjectForBeginner, diagnoseRunError, scaffoldProjectV2, createAgentSession, rememberAgentTurn, generateProjectVariations, autoNameProject, suggestTemplateForPrompt } from './studio/aiAgent.js';
 import { INTERACTIVE_LESSONS, getLessonProgress, completeLesson, explainTerm } from './studio/lessons.js';
-import { createProjectSnapshot, listProjectSnapshots, restoreProjectSnapshot, buildShareCardSvg } from './studio/snapshots.js';
+import { clearProjectSnapshots, createProjectSnapshot, listProjectSnapshots, restoreProjectSnapshot, buildShareCardSvg } from './studio/snapshots.js';
 import { loadQuestProgress, saveQuestProgress, recordCreatorAction, getDailyQuests, questSummaryLine, levelTitle, ACHIEVEMENTS } from './studio/quests.js';
 import { startWebGLScene, parseOBJ, exportOBJ, createMeshGeometry, projectScenePoint, sceneObjectIdentity } from './studio/scene3d.js';
 import { importGLTF, exportGLB, importFBX, exportFBX } from './studio/assetFormats.js';
 import { generatePlanarUVs, sculptTriangleMesh, createBasicRig, bakeRigPose, paintRigWeights, evaluateRigSkin, createAnimationClip, applyAnimationClip, bakeTriangleMeshTransform, joinTriangleMeshes } from './studio/modeling.js';
 import { advancePhysics, countSceneStats, createEngineObject, createRigidBody, mirrorTriangleMesh, mirrorDuplicateTriangleMesh, subdivideTriangleMesh, createProceduralTerrainGeometry, optimizeTriangleMesh } from './studio/engine.js';
-import { buildStandaloneGame, buildAndroidProjectZip } from './studio/gameExport.js';
-import { renderPathTracedImage } from './studio/pathTracer.js';
 import { SceneHistory, applyAxisTransform } from './studio/sceneHistory.js';
 import { DEFAULT_REALM_SOURCE, validateRealmSource } from './language/realm.js';
-import { mountAetherfallGame } from './studio/aetherfall-game.js';
+import { APP_VERSION, APP_VERSION_LABEL, APP_TAGLINE } from './core/version.js';
+import { createSafeStorage, createDataExport, importDataExport, estimateStorage, formatBytes, isStorageAvailable } from './core/storage.js';
+import { ACCENTS, applyPreferences, loadPreferences, normalizePreferences, savePreferences, setPreference, resolveTheme, THEMES } from './core/preferences.js';
+import { createShortcutRegistry, formatCombo, isMacPlatform, normalizeCombo } from './core/shortcuts.js';
+import { announce, buildSkipLink, createFocusTrap, getFocusable, prefersReducedMotion } from './core/a11y.js';
+import { buildBootFallbackHtml, bindBootFallback, clearErrorLog, describeError, installGlobalErrorHandlers, readErrorLog, recordError, safeAsync } from './core/errors.js';
+import { createInstallManager, getNetworkStatus, isStandalone, onNetworkChange, registerServiceWorker, serviceWorkerSupported } from './core/pwa.js';
+import { auditProject, healthSummary, topIssues } from './studio/health.js';
+import { searchProject } from './studio/projectSearch.js';
+import { activateTab, closeTab, closeOtherTabs, createTabState, cycleTab, markTabDirty, openTab, renameTab, syncTabs, tabDisplayName } from './studio/editorTabs.js';
+import { askConfirm, askText, closeAllDialogs, openDialog, toastHtml } from './ui/dialog.js';
+import { openMenu } from './ui/menu.js';
+import { openCommandPalette as showCommandPalette } from './ui/commandPalette.js';
+import { openSettingsDialog } from './ui/settingsDialog.js';
+import { openHealthDialog } from './ui/healthDialog.js';
+import { openShortcutsDialog } from './ui/shortcutsDialog.js';
+import { openProjectSearchDialog } from './ui/projectSearchDialog.js';
 import { buildPresetMaterialGraph, compileMaterialGraphToPBR } from './studio/materialGraph.js';
 import { buildPresetGeometryNodeGraph, evaluateGeometryNodeGraph } from './studio/geometryNodes.js';
 import { buildVfxTriangleMesh, createVfxEmitter, stepVfxEmitter } from './studio/vfx.js';
@@ -69,6 +83,25 @@ let viewportGizmoMode = 'move';
 let cameraPersistTimer = 0;
 let nextEngineObjectId = 1;
 
+// ── v10 production state ────────────────────────────────────────────────
+const platformIsMac = isMacPlatform();
+const preferenceStore = createSafeStorage({ kind: 'local' });
+const sessionStore = createSafeStorage({ kind: 'session' });
+let preferences = loadPreferences(preferenceStore);
+let editorTabState = createTabState(project.activeFile || Object.keys(project.files)[0] || null, project.activeFile ? [project.activeFile] : []);
+let recentCommandIds = [];
+try { recentCommandIds = JSON.parse(preferenceStore.getItem('recent-commands') || '[]').filter((id) => typeof id === 'string').slice(0, 8); } catch { recentCommandIds = []; }
+const shortcutRegistry = createShortcutRegistry();
+const installManager = createInstallManager({ windowRef: typeof window !== 'undefined' ? window : null });
+const networkStatus = getNetworkStatus();
+let storageEstimate = { supported: false, usage: 0, quota: 0, percent: 0 };
+let lastHealthAudit = null;
+let healthAuditDirty = true;
+let activeSettingsDialog = null;
+let appBooted = false;
+let pwaUpdateWorker = null;
+const SW_URL = './sw.js';
+
 const icons = {
   logo: '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3 35 11.5v17L20 37 5 28.5v-17z" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 13h16v5H17v4h11v5H12z" fill="currentColor"/></svg>',
   run: '<svg viewBox="0 0 20 20"><path d="M6 3.8 16 10 6 16.2z" fill="currentColor"/></svg>',
@@ -82,8 +115,9 @@ const icons = {
 function renderShell() {
   app.innerHTML = `
     <div class="app-shell" id="appShell">
+      <a class="skip-link" href="#fileTree" id="orvexaSkipLink">Skip to workspace</a>
       <header class="topbar">
-        <div class="brand-lockup"><span class="brand-mark">${icons.logo}</span><span class="brand-text"><strong>Orvexa</strong><small>STUDIO</small></span><span class="version-pill">ORVEXA STUDIO v6.0</span></div>
+        <div class="brand-lockup"><span class="brand-mark">${icons.logo}</span><span class="brand-text"><strong>Orvexa</strong><small>STUDIO</small></span><span class="version-pill" title="Orvexa Studio ${APP_VERSION} — ${APP_TAGLINE}">${APP_VERSION_LABEL}</span></div>
         <div class="project-title-wrap"><span class="project-dot"></span><button id="projectNameButton" class="project-name-button" title="Rename project">${escapeHtml(project.name)}</button><span class="saved-state" id="savedState"><span class="saved-dot"></span> Saved locally</span></div>
         <div class="top-actions">
           <div class="experience-switcher" role="group" aria-label="Experience mode switcher"><button type="button" class="experience-switch-button" data-experience-mode="beginner" title="Beginner — guided, friendly, 1-click">🌱<span>Beginner</span></button><button type="button" class="experience-switch-button" data-experience-mode="creator" title="Creator — balanced tools and previews">🎨<span>Creator</span></button><button type="button" class="experience-switch-button" data-experience-mode="pro" title="Pro — full Omega engine surface">🚀<span>Pro</span></button></div><button class="top-button secondary" id="quickCreateTopButton" type="button" title="Open the 1-click Quick Create Launchpad">⚡ <span>Quick Create</span></button><button class="top-button secondary" id="aiAgentTopButton" type="button" title="Open the Orvexa AI Agent">🤖 <span>AI Agent</span></button><button class="top-button secondary" id="autoFixTopButton" type="button" title="Auto-fix common errors in the current file with AI">🛠️ <span>Auto-Fix AI</span></button><button class="top-button primary play-world-top" id="playWorldButton" title="Play the Aetherfall open-world game">✦ <span>World</span></button>
@@ -94,14 +128,17 @@ function renderShell() {
           <button class="top-button secondary download-source" id="downloadButton">${icons.download}<span>Download</span></button>
           <button class="top-button secondary save-top-button" id="saveButton">Save</button>
           <button class="top-button secondary build-top-button" id="buildButton" title="Build a standalone static website snapshot">Build</button>
-          <button class="top-button secondary stop-top-button" id="stopButton" disabled title="Execution is synchronous in this version; interruptible worker execution is on the roadmap">Stop</button>
+          <button class="top-button secondary command-top-button" id="commandButton" type="button" aria-haspopup="dialog" title="Command palette (Ctrl/Cmd+K)">⌘ <span>Commands</span></button>
+          <button class="top-button secondary" id="installAppButton" type="button" hidden title="Install Orvexa Studio as an app">⬇ <span>Install</span></button>
+          <button class="top-button secondary icon-only-top" id="helpButton" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (F1)">?</button>
+          <button class="top-button secondary icon-only-top" id="settingsButton" type="button" aria-label="Settings" title="Settings (Ctrl/Cmd+,)">⚙</button>
           <button class="top-button theme-toggle" id="themeButton" aria-label="Switch theme" title="Switch theme">☼</button>
           <button class="top-button primary run-button" id="runButton">${icons.run}<span>Run</span><kbd>Ctrl ↵</kbd></button>
         </div>
       </header>
       <div class="workspace">
         <aside class="explorer-pane panel">
-          <div class="pane-heading"><div><span class="eyebrow">WORKSPACE</span><h2>Explorer</h2></div><div class="pane-heading-actions"><button id="newFolderButton" class="icon-button" title="New folder">${icons.folder}</button><button id="newFileButton" class="icon-button" title="New file">${icons.plus}</button><button id="explorerMenuButton" class="icon-button" title="Project actions">⋯</button></div></div>
+          <div class="pane-heading"><div><span class="eyebrow">WORKSPACE</span><h2>Explorer</h2></div><div class="pane-heading-actions"><button id="projectHealthButton" class="icon-button health-icon-button" title="Project health" aria-label="Project health">♥</button><button id="newFolderButton" class="icon-button" title="New folder" aria-label="New folder">${icons.folder}</button><button id="newFileButton" class="icon-button" title="New file" aria-label="New file">${icons.plus}</button><button id="explorerMenuButton" class="icon-button" title="Project actions" aria-label="Project actions" aria-haspopup="menu">⋯</button></div></div>
           <div class="explorer-project-label"><span class="chevron open">⌄</span><span class="folder-emoji">▰</span><span id="treeProjectName">${escapeHtml(project.name)}</span></div>
           <div id="fileTree" class="file-tree"></div>
           <div class="explorer-divider"></div>
@@ -110,7 +147,7 @@ function renderShell() {
           <div class="explorer-footer"><div class="status-orbit"></div><span>Local workspace</span><span class="footer-spacer"></span><span class="tiny-chip">OFFLINE READY</span></div>
         </aside>
         <section class="editor-pane panel">
-          <div class="editor-topline"><div class="editor-view-tabs"><button class="view-tab active" data-editor-mode="code">${escapeHtml(project.activeFile || 'main.orv')} <span class="tab-close">×</span></button></div><div class="editor-top-actions"><button id="findButton" class="subtle-action">${icons.search}<span>Find</span></button><button id="formatButton" class="subtle-action" title="Format basic indentation">Format</button><button id="editorMenuButton" class="icon-button" title="Editor options">⋯</button></div></div>
+          <div class="editor-topline"><div class="editor-view-tabs" id="editorTabs" role="tablist" aria-label="Open files"></div><div class="editor-top-actions"><button id="quickOpenButton" class="subtle-action" title="Quick open a file (Ctrl/Cmd+K)" aria-label="Quick open a file">⌘</button><button id="findButton" class="subtle-action" aria-label="Find in current file">${icons.search}<span>Find</span></button><button id="projectSearchButton" class="subtle-action" title="Search the whole project (Ctrl/Cmd+Shift+F)" aria-label="Search the whole project">⌕</button><button id="formatButton" class="subtle-action" title="Format basic indentation" aria-label="Format indentation">Format</button><button id="editorMenuButton" class="icon-button" title="Editor options" aria-label="Editor options" aria-haspopup="menu">⋯</button></div></div>
           <div class="file-crumbs"><span>PROJECT</span><span class="crumb-chevron">/</span><span id="fileCrumb">${escapeHtml(project.activeFile || 'main.orv')}</span><span class="crumb-dot">●</span><span id="editorLanguage">ORVEXA</span></div>
           <div id="findBar" class="find-bar" hidden><input id="findInput" placeholder="Find in current file…" aria-label="Find in current file"/><span id="findCount">—</span><button id="findPrev" class="tiny-control" title="Previous match">↑</button><button id="findNext" class="tiny-control" title="Next match">↓</button><button id="findClose" class="tiny-control" title="Close search">×</button></div>
           <div class="editor-workspace" id="editorWorkspace"><div id="autocompleteMenu" class="autocomplete-menu" hidden></div><div id="lineNumbers" class="line-numbers" aria-hidden="true"></div><div class="code-scroll" id="codeScroll"><pre id="codeHighlight" class="code-highlight" aria-hidden="true"></pre><textarea id="codeEditor" class="code-editor" autocomplete="off" autocapitalize="off" spellcheck="false" wrap="off" aria-label="Orvexa source editor"></textarea></div><div class="editor-empty-hint" id="editorHint" hidden>Choose a source file to begin.</div></div>
@@ -121,45 +158,103 @@ function renderShell() {
           </section>
         </section>
         <aside class="preview-pane panel">
-          <div class="preview-heading"><div><span class="eyebrow">LIVE WORKSPACE</span><h2>Preview</h2></div><div class="preview-toolbar"><button id="refreshPreviewButton" class="icon-button" title="Run current file">↻</button><button id="previewMenuButton" class="icon-button" title="Preview options">⋯</button></div></div>
+          <div class="preview-heading"><div><span class="eyebrow">LIVE WORKSPACE</span><h2>Preview</h2></div><div class="preview-toolbar"><button id="refreshPreviewButton" class="icon-button" title="Run current file" aria-label="Run current file">↻</button><button id="previewMenuButton" class="icon-button" title="Preview options" aria-label="Preview options" aria-haspopup="menu">⋯</button></div></div>
           <div class="preview-tabs"><button data-right-tab="home" class="preview-tab"><span class="mini-tab-icon">🏠</span> Home</button><button data-right-tab="preview" class="preview-tab active"><span class="mini-tab-icon">◉</span> Website</button><button data-right-tab="scene" class="preview-tab"><span class="mini-tab-icon">◇</span> Scene</button><button data-right-tab="game" class="preview-tab"><span class="mini-tab-icon">✦</span> World</button><button data-right-tab="launchpad" class="preview-tab"><span class="mini-tab-icon">🚀</span> Quick Create</button><button data-right-tab="ai" class="preview-tab"><span class="mini-tab-icon">🤖</span> AI Agent</button><button data-right-tab="docs" class="preview-tab"><span class="mini-tab-icon">▤</span> Docs</button></div>
           <div class="preview-content" id="previewContent"><div class="preview-empty"><div class="preview-orbit"><span></span><i></i><b></b></div><h3>Ready when you are</h3><p>Run your Orvexa program to render its page here.</p><button id="previewRunButton" class="preview-empty-button">${icons.run} Run program</button><div class="preview-shortcut">Or press <kbd>Ctrl</kbd> + <kbd>Enter</kbd></div></div></div>
           <div class="preview-bottomline"><span class="preview-live-dot"></span><span id="previewState">Waiting for program</span><span class="footer-spacer"></span><span id="previewSize">Responsive preview</span></div>
         </aside>
       </div>
-      <footer class="global-status"><span class="global-status-brand">${icons.logo}</span><span>Orvexa Studio</span><span class="status-divider"></span><span id="globalState">Ready</span><span class="footer-spacer"></span><span>Orvexa Studio v9.0 · Har Din Naya Kamaal</span><span class="status-divider"></span><span>Built for the browser</span><span class="status-divider"></span><span id="creatorLevelBadge" class="creator-badge">⭐ Lv 1 Naya Creator</span></footer>
-      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <footer class="global-status"><span class="global-status-brand">${icons.logo}</span><span>Orvexa Studio</span><span class="status-divider"></span><span id="globalState">Ready</span><span class="footer-spacer"></span><span>Orvexa Studio v${APP_VERSION} · ${APP_TAGLINE}</span><span class="status-divider"></span><span>Built for the browser</span><span class="status-divider"></span><span id="networkBadge" class="network-badge" title="Network status">Online</span><span class="status-divider"></span><span id="creatorLevelBadge" class="creator-badge">⭐ Lv 1 Naya Creator</span></footer>
+      <div id="appErrorBanner" class="app-error-banner" role="alert" hidden>
+        <span class="app-error-icon" aria-hidden="true">⚠</span>
+        <div><strong id="appErrorTitle">Something went wrong</strong><p id="appErrorText"></p></div>
+        <button type="button" class="button secondary" id="errorDetailsButton">Details</button>
+        <button type="button" class="button secondary" id="errorReloadButton">Reload</button>
+        <button type="button" class="icon-button" id="errorDismissButton" aria-label="Dismiss error">✕</button>
+      </div>
+      <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="pwaUpdateToast" class="pwa-update-toast" role="status" hidden><span>New version ready.</span><button type="button" class="button primary" id="pwaUpdateButton">Update now</button><button type="button" class="icon-button" id="pwaUpdateDismiss" aria-label="Dismiss update">✕</button></div>
     </div>`;
 }
 
 function escapeHtml(value) { return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;'); }
 function escapeAttr(value) { return escapeHtml(value).replaceAll('`', '&#96;'); }
 function toast(message, kind = 'info') {
-  const el = $('#toast'); if (!el) return; el.textContent = message; el.className = `toast visible ${kind}`;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('visible'), 2700);
+  const el = $('#toast'); if (!el) return;
+  el.innerHTML = toastHtml(message, kind);
+  el.className = `toast visible ${kind}`;
+  el.dataset.state = 'visible';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('visible'); el.dataset.state = 'hidden'; }, kind === 'error' ? 4200 : 2700);
 }
 function saveLocal(showToast = false) {
+  healthAuditDirty = true;
   project.updatedAt = new Date().toISOString();
+  if ($('#codeEditor') && project.files[currentFile()] !== undefined) project.files[currentFile()] = $('#codeEditor').value;
   const ok = saveProject(project);
-  $('#savedState').innerHTML = `<span class="saved-dot"></span>${ok ? 'Saved locally' : 'Storage unavailable'}`;
+  const tab = currentFile();
+  if (tab) editorTabState = markTabDirty(editorTabState, tab, false);
+  renderEditorTabs();
+  $('#savedState').innerHTML = `<span class="saved-dot"></span>${ok ? 'Saved locally' : 'Storage full — export now'}`;
   $('#globalState').textContent = ok ? 'Saved' : 'Save to download to keep changes';
   if (showToast) toast(ok ? 'Project saved in this browser.' : 'Browser storage is full or unavailable. Download a project ZIP to keep your work.', ok ? 'success' : 'warning');
   return ok;
 }
-function scheduleSave() { $('#savedState').innerHTML = '<span class="saved-dot saving"></span> Saving…'; clearTimeout(autosaveTimer); autosaveTimer = setTimeout(() => saveLocal(), 300); }
+function scheduleSave() {
+  healthAuditDirty = true;
+  const delay = Number(preferences.autosaveDelay);
+  const saved = $('#savedState');
+  clearTimeout(autosaveTimer);
+  if (delay <= 0) {
+    if (saved) saved.innerHTML = '<span class="saved-dot unsaved"></span> Unsaved · Ctrl/Cmd+S';
+    return;
+  }
+  if (saved) saved.innerHTML = '<span class="saved-dot saving"></span> Saving…';
+  autosaveTimer = setTimeout(() => {
+    saveLocal();
+    editorTabState = markTabDirty(editorTabState, currentFile(), false);
+    renderEditorTabs();
+  }, delay);
+}
 function currentFile() { return project.files[project.activeFile] !== undefined ? project.activeFile : Object.keys(project.files)[0]; }
 function contentOf(file = currentFile()) { return project.files[file] ?? ''; }
-function setCurrentFile(file) {
+function setCurrentFile(file, { openInTabs = true } = {}) {
   if (!(file in project.files)) return;
+  const previous = currentFile();
+  if (previous && previous in project.files && $('#codeEditor')) project.files[previous] = $('#codeEditor').value;
   project.activeFile = file;
+  editorTabState = openInTabs ? openTab(editorTabState, file) : activateTab(editorTabState, file);
   $('#codeEditor').value = project.files[file];
   $('#fileCrumb').textContent = file;
-  $('.view-tab').firstElementChild?.replaceChildren();
-  $('.view-tab').innerHTML = `${escapeHtml(file)} <span class="tab-close">×</span>`;
-  $('.view-tab').title = file;
   $('#editorLanguage').textContent = file.toLowerCase().endsWith('.orv') ? 'ORVEXA' : file.toLowerCase().endsWith('.realm') ? 'ORVEXA REALMSCRIPT' : file.split('.').at(-1).toUpperCase();
-  updateEditorVisuals(); renderTree(); updateCursorPosition(); scheduleSave();
+  updateEditorVisuals(); renderTree(); renderEditorTabs(); updateCursorPosition(); scheduleSave();
 }
+function renderEditorTabs() {
+  const root = $('#editorTabs');
+  if (!root) return;
+  editorTabState = syncTabs(editorTabState, Object.keys(project.files));
+  if (project.activeFile && editorTabState.tabs.includes(project.activeFile) && editorTabState.active !== project.activeFile) editorTabState = activateTab(editorTabState, project.activeFile);
+  const canClose = editorTabState.tabs.length > 1;
+  root.innerHTML = editorTabState.tabs.map((path) => {
+    const active = path === editorTabState.active;
+    const dirty = editorTabState.dirty.includes(path);
+    const name = tabDisplayName(path);
+    const ext = name.split('.').at(-1).toLowerCase();
+    return `<div class="editor-tab${active ? ' active' : ''}${dirty ? ' dirty' : ''}" role="tab" aria-selected="${active}" tabindex="${active ? 0 : -1}" data-editor-tab="${escapeAttr(path)}" title="${escapeAttr(path)}${dirty ? ' · unsaved' : ''}">
+      <span class="editor-tab-glyph ext-${escapeAttr(ext)}" aria-hidden="true">${ext === 'orv' ? '◈' : ext === 'realm' ? '✦' : ext === 'js' ? 'JS' : ext === 'json' ? '{}' : '·'}</span>
+      <span class="editor-tab-name">${escapeHtml(name)}</span>
+      ${dirty ? '<span class="editor-tab-dirty" aria-label="Unsaved changes"></span>' : ''}
+      ${canClose ? `<button type="button" class="editor-tab-close" data-tab-close="${escapeAttr(path)}" aria-label="Close ${escapeAttr(name)}" tabindex="-1">×</button>` : ''}
+    </div>`;
+  }).join('');
+  root.querySelector('[data-editor-tab].active')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+}
+function syncEditorTabsAfterFileChange(preferred = null) {
+  editorTabState = syncTabs(editorTabState, Object.keys(project.files));
+  const target = preferred && project.files[preferred] !== undefined ? preferred : editorTabState.active || Object.keys(project.files)[0];
+  if (target) setCurrentFile(target, { openInTabs: false });
+}
+
 function renderTree() {
   const tree = $('#fileTree'); if (!tree) return;
   const dirs = new Set(project.folders || []);
@@ -206,6 +301,10 @@ function refreshHighlights() {
 }
 function saveEditorToProject() {
   const file = currentFile(); if (file) project.files[file] = $('#codeEditor').value;
+  if (file) {
+    editorTabState = markTabDirty(editorTabState, file, true);
+    renderEditorTabs();
+  }
   scheduleSave(); refreshHighlights();
 }
 function updateDiagnostics(result) {
@@ -399,6 +498,9 @@ const TOUR_STEPS = [
   { selector: '#aiAgentTopButton', text: '🤖 AI Agent ko bas bolo kya chahiye — "ek racing game banao" — woh khud bana dega.' },
   { selector: '#autoFixTopButton', text: '🛠️ Galti ho jaye to ghabrana mat — Auto-Fix AI ek click mein theek kar dega.' },
   { selector: '.experience-switcher', text: '🌱 Mode badlo: Beginner = super simple, Pro = full power. Abhi Beginner hi best hai.' },
+  { selector: '#commandButton', text: '⌘ Command palette: Ctrl/Cmd+K dabao — har command, file aur setting ek search box se mil jayegi.' },
+  { selector: '#settingsButton', text: '⚙ Settings mein theme, accent, font size, motion, contrast aur privacy — sab kuch control karo (Ctrl/Cmd+,).' },
+  { selector: '#projectHealthButton', text: '♥ Project Health batata hai project kitna saaf hai — score, grade aur har issue ka exact line number.' },
   { selector: '#playWorldButton', text: '✦ Aur ye hai Aetherfall — ek poori 3D duniya jo khelne ke liye ready hai. Tour khatam, ab banao kuch kamaal ka!' },
 ];
 function endTour(done = true) {
@@ -431,14 +533,28 @@ function renderHomeTab() { refreshCreatorBadge();
   try { recent = JSON.parse(localStorage.getItem('orvexa-recent-creations') || '[]'); } catch { recent = []; }
   const totd = getTemplateOfTheDay();
   const snapshots = listProjectSnapshots();
+  const health = currentHealthSummary();
+  const urgent = topIssues(health, 3);
   panel.innerHTML = `<div class="home-panel">
-    <div class="home-hero"><span class="docs-kicker">ORVEXA STUDIO v8.0 · SABKE LIYE CREATOR</span><h3>Kya banana hai aaj? 🎨</h3><p>Bina code seekhe — ek click mein realistic game, website ya app. AI tumhaara saathi hai, galti hogi to woh theek kar dega.</p>
+    <div class="home-hero"><span class="docs-kicker">ORVEXA STUDIO v10.0 · PRODUCTION GRADE</span><h3>Kya banana hai aaj? 🎨</h3><p>Bina code seekhe — ek click mein realistic game, website ya app. AI tumhaara saathi hai, galti hogi to woh theek kar dega.</p>
     <div class="home-big-cards">
       <button type="button" class="home-big-card" id="homeMakeGame"><strong>🎮 Game Banao</strong><span>24 ready games — 1 click mein kheliye</span></button>
       <button type="button" class="home-big-card" id="homeMakeWeb"><strong>🌐 Website / App Banao</strong><span>18 ready templates — dukaan, portfolio, sab kuch</span></button>
       <button type="button" class="home-big-card" id="homeMake3d"><strong>🧊 3D Model Banao</strong><span>Scene aur Modeler — drag, drop, rang badlo</span></button>
     </div>
     <div class="home-actions"><button type="button" class="button primary" id="homeStartTour">🎓 Guided Tour chalao</button><button type="button" class="button secondary" id="homeAskAi">🤖 AI se banao</button><span class="home-xp">⭐ Creator Level ${progress.level} · ${progress.totalXp} XP · ${progress.completed}/${progress.totalLessons} lessons</span></div></div>
+    <div class="home-production-strip">
+      <div class="home-health-card tone-${escapeAttr(health.grade.tone)}">
+        <div class="home-health-score"><strong>${health.score}</strong><span>${escapeHtml(health.grade.grade)}</span></div>
+        <div class="home-health-copy"><span class="docs-kicker">PROJECT HEALTH · ${escapeHtml(health.grade.label)}</span><p>${escapeHtml(health.headline)}</p><small>${urgent.length ? urgent.map((issue) => escapeHtml(issue.title)).join(' · ') : 'No blocking issues found.'}</small></div>
+        <button type="button" class="button secondary" id="homeHealthButton">Open audit →</button>
+      </div>
+      <div class="home-quick-tools" aria-label="Quick tools">
+        <button type="button" class="home-quick-tool" id="homeSearchProject"><span>⌕</span><strong>Search project</strong><kbd>${escapeHtml(formatCombo('mod+shift+f', { isMac: platformIsMac }))}</kbd></button>
+        <button type="button" class="home-quick-tool" id="homeOpenSettings"><span>⚙</span><strong>Settings</strong><kbd>${escapeHtml(formatCombo('mod+,', { isMac: platformIsMac }))}</kbd></button>
+        <button type="button" class="home-quick-tool" id="homeOpenShortcuts"><span>⌨</span><strong>Shortcuts</strong><kbd>F1</kbd></button>
+      </div>
+    </div>
     <h4>📅 Aaj ke Creator Quests — XP kamao, badge jeeto!</h4>
     <div class="home-quests">${getDailyQuests(getQuestState(), todayText()).map(q => `<div class="home-quest${q.completed ? ' done' : ''}"><span class="home-quest-icon">${q.icon}</span><div><strong>${escapeHtml(q.titleHi)}</strong><p>${escapeHtml(q.titleEn)} · +${q.xp} XP</p><div class="quest-bar"><i style="width:${q.progressPercent}%"></i></div></div><span class="home-quest-progress">${q.completed ? '✅ Ho gaya!' : `${q.progress}/${q.target}`}</span></div>`).join('')}</div>
     <div class="home-badges">${ACHIEVEMENTS.map(b => { const owned = getQuestState().unlockedAchievements.includes(b.id); return `<span class="home-badge${owned ? ' owned' : ' locked'}" title="${escapeAttr(owned ? b.descHi : `${b.descHi} (abhi locked)`)}">${b.icon} ${escapeHtml(b.nameHi)}</span>`; }).join('')}</div>
@@ -458,6 +574,10 @@ function renderHomeTab() { refreshCreatorBadge();
   $('#homeMakeWeb')?.addEventListener('click', () => { launchpadCategory = 'web'; activateRightTab('launchpad'); });
   $('#homeMake3d')?.addEventListener('click', () => activateRightTab('scene'));
   $('#homeStartTour')?.addEventListener('click', startTour);
+  $('#homeHealthButton')?.addEventListener('click', openProjectHealthDialog);
+  $('#homeSearchProject')?.addEventListener('click', openProjectSearch);
+  $('#homeOpenSettings')?.addEventListener('click', openSettings);
+  $('#homeOpenShortcuts')?.addEventListener('click', openShortcutsHelp);
   $('#homeAskAi')?.addEventListener('click', () => activateRightTab('ai'));
   $('#homeTotdLaunch')?.addEventListener('click', () => { if (totd.realmSource || totd.playable) loadBlueprintIntoProject(totd.id); else loadWebTemplateIntoProject(totd.id); });
   panel.querySelectorAll('[data-home-recent]').forEach(b => b.addEventListener('click', () => { const [kind, id] = b.dataset.homeRecent.split(':'); if (kind === 'game') loadBlueprintIntoProject(id); else loadWebTemplateIntoProject(id); }));
@@ -471,14 +591,24 @@ function renderHomeTab() { refreshCreatorBadge();
   $('#homeDictPhysics')?.addEventListener('click', () => dict('physics'));
 }
 
-function renderGameTab() {
+async function renderGameTab() {
   if (currentRightTab !== 'game') return;
   const panel = $('#previewContent');
-  panel.innerHTML = '';
-  const cleanupGame = mountAetherfallGame(panel, { source: activeRealmSource });
-  const onExit = () => activateRightTab('preview');
-  document.addEventListener('orvexa-exit-world', onExit);
-  worldGameCleanup = () => { document.removeEventListener('orvexa-exit-world', onExit); cleanupGame?.(); };
+  panel.innerHTML = '<div class="panel-skeleton world-loading-skeleton"><span class="skeleton-mark">✦</span><strong>Loading the Aetherfall world…</strong><p>Streaming the engine chunk only when you open World keeps the Studio boot fast.</p><div class="skeleton-bar"><i></i></div></div>';
+  try {
+    const { mountAetherfallGame } = await import('./studio/aetherfall-game.js');
+    if (currentRightTab !== 'game') return;
+    panel.innerHTML = '';
+    const cleanupGame = mountAetherfallGame(panel, { source: activeRealmSource });
+    const onExit = () => activateRightTab('preview');
+    document.addEventListener('orvexa-exit-world', onExit);
+    worldGameCleanup = () => { document.removeEventListener('orvexa-exit-world', onExit); cleanupGame?.(); };
+  } catch (error) {
+    panel.innerHTML = `<div class="panel-error"><strong>The world could not load.</strong><p>${escapeHtml(error.message)}</p><button type="button" class="button secondary" id="retryWorldButton">Retry</button></div>`;
+    $('#retryWorldButton')?.addEventListener('click', renderGameTab);
+    recordError(error, { storage: sessionStore, meta: { source: 'aetherfall-lazy-load' } });
+    toast('Aetherfall failed to load. Retry or open the direct play page.', 'error');
+  }
 }
 function renderSceneTab(result) {
   if (currentRightTab !== 'scene') return;
@@ -1005,9 +1135,11 @@ async function importSceneAsset(file) {
     toast(`Imported ${meshes.length} model${meshes.length===1?'':' meshes'} from ${ext.toUpperCase()}. Convert meshes, generate UVs, sculpt, or create a basic rig.`, 'success');
   } catch(error) { toast(`3D asset import failed: ${error.message}`, 'error'); }
 }
-function exportStandaloneGame() {
+async function exportStandaloneGame() {
   try {
     const scene=lastResult?.scenes?.[currentSceneIndex];if(!scene)throw new Error('Open or create a 3D scene before building a game.');
+    toast('Packaging the standalone game…', 'info');
+    const { buildStandaloneGame } = await import('./studio/gameExport.js');
     const blob=buildStandaloneGame(scene,`${scene.name||project.name} · Orvexa Game`);
     downloadBlob(blob,`${safeFilename(scene.name||project.name)}-Playable-Game.zip`);
     toast('Standalone playable HTML game ZIP created. Extract it and open index.html or host the folder.', 'success');
@@ -1029,6 +1161,7 @@ async function openPathTraceDialog(scene) {
     const token = ++renderToken; const params = presets[$('#pathTraceQuality', backdrop).value] || presets.mobile;
     runButton.disabled = true; downloadButton.disabled = true; latestRendered = false; stats.textContent = 'Building BVH and tracing the scene…'; status.textContent = 'Preparing triangles…';
     try {
+      const { renderPathTracedImage } = await import('./studio/pathTracer.js');
       const render = await renderPathTracedImage(scene, {...params, exposure: Number(scene.renderSettings?.exposure ?? 1.15), signal: abortController.signal, onProgress: progress => { if (token === renderToken && status.isConnected) status.textContent = `Tracing scanlines: ${progress.percent}% · ${progress.rays.toLocaleString()} path rays`; }});
       if (token !== renderToken || !canvas.isConnected) return;
       canvas.width = render.width; canvas.height = render.height;
@@ -1067,7 +1200,7 @@ function exportSelectedFBX() {
   catch(error){toast(`FBX export failed: ${error.message}`,'error');}
 }
 async function exportAndroidProject() {
-  try { const scene=lastResult?.scenes?.[currentSceneIndex];if(!scene)throw new Error('Open or create a 3D scene before building its Android project.');const blob=await buildAndroidProjectZip(scene,`${scene.name||project.name} · Orvexa Game`);downloadBlob(blob,`${safeFilename(scene.name||project.name)}-Android-APK-Project.zip`);toast('Android project ZIP created. On a phone, upload its extracted OrvexaGame contents to GitHub and download the APK from the included Actions workflow.', 'success'); }
+  try { const scene=lastResult?.scenes?.[currentSceneIndex];if(!scene)throw new Error('Open or create a 3D scene before building its Android project.');toast('Generating the Android project…', 'info');const { buildAndroidProjectZip } = await import('./studio/gameExport.js');const blob=await buildAndroidProjectZip(scene,`${scene.name||project.name} · Orvexa Game`);downloadBlob(blob,`${safeFilename(scene.name||project.name)}-Android-APK-Project.zip`);toast('Android project ZIP created. On a phone, upload its extracted OrvexaGame contents to GitHub and download the APK from the included Actions workflow.', 'success'); }
   catch(error){toast(`Android project export failed: ${error.message}`,'error');}
 }
 
@@ -1210,10 +1343,11 @@ function applyAtmosphereMood(moodId) {
 }
 function insertUiBlockIntoCurrentFile(blockId) {
   try {
-    const fixed = insertVisualUiBlock(project.files[currentFile] ?? $('#codeEditor').value, blockId);
-    project.files[currentFile] = fixed;
+    const file = currentFile();
+    const fixed = insertVisualUiBlock(project.files[file] ?? $('#codeEditor').value, blockId);
+    project.files[file] = fixed;
     $('#codeEditor').value = fixed; updateEditorVisuals(); scheduleSave();
-    toast('Visual UI block inserted into the current page.', 'success');
+    toast(`Visual UI block inserted into ${file}.`, 'success');
   } catch (error) { toast(error.message, 'error'); }
 }
 function applyExperienceMode(modeId, announce = true) {
@@ -1379,7 +1513,7 @@ function renderLaunchpadTab() {
   const animCards = Object.entries(SEQUENCER_PRESETS).filter(([id, sq]) => launchpadMatches(`${id} ${sq.name}`)).map(([id, sq]) => `<div class="launchpad-card glass"><strong>🎬 ${escapeHtml(sq.name)}</strong><span>${escapeHtml(id)} · ${sq.duration}s · ${sq.tracks.length} tracks</span><div class="launchpad-card-actions"><button type="button" class="button primary" data-lp-anim="${escapeAttr(id)}">▶ Play in 3D Scene</button></div></div>`).join('');
   const uiCards = VISUAL_UI_BLOCKS.filter(x => launchpadMatches(`${x.name} ${x.description}`)).map(x => `<div class="launchpad-card glass"><strong>🧩 ${escapeHtml(x.name)}</strong><span>${escapeHtml(x.description)}</span><div class="launchpad-card-actions"><button type="button" class="button primary" data-insert-ui-block="${escapeAttr(x.id)}">＋ Insert UI Block</button></div></div>`).join('');
   panel.innerHTML = `<div class="launchpad-panel">
-    <div class="launchpad-hero"><span class="docs-kicker">ORVEXA STUDIO v7.0 · OMEGA ENGINE · 1-CLICK CREATION</span><h3>⚡ Quick Create Launchpad</h3><p>Pick an experience mode, then launch a game, website, prefab, mood, sound or animation — no code, no API key, no setup.</p>
+    <div class="launchpad-hero"><span class="docs-kicker">ORVEXA STUDIO v10.0 · OMEGA ENGINE · 1-CLICK CREATION</span><h3>⚡ Quick Create Launchpad</h3><p>Pick an experience mode, then launch a game, website, prefab, mood, sound or animation — no code, no API key, no setup.</p>
     <div class="launchpad-modes">${EXPERIENCE_MODES.map(m => `<button type="button" class="launchpad-mode${m.id === experienceMode ? ' active' : ''}" data-experience-mode="${m.id}"><strong>${m.icon} ${escapeHtml(m.name)}</strong><span>${escapeHtml(m.description)}</span></button>`).join('')}</div>
     <div class="launchpad-search"><select id="launchpadSortSelect" aria-label="Sort templates"><option value="popular"${launchpadSort === 'popular' ? ' selected' : ''}>⭐ Popular</option><option value="az"${launchpadSort === 'az' ? ' selected' : ''}>A–Z naam</option><option value="biggest"${launchpadSort === 'biggest' ? ' selected' : ''}>📄 Sabse bade pehle</option></select><button type="button" class="button secondary" id="launchpadSurprise">🎲 Surprise Me!</button><input id="launchpadSearchInput" type="search" placeholder="Search games, apps, prefabs, moods, sounds, animations…" value="${escapeAttr(launchpadQuery)}" aria-label="Search Launchpad"></div>
     <div class="launchpad-pills" role="group" aria-label="Launchpad categories">${LAUNCHPAD_CATEGORIES.map(([id, label]) => `<button type="button" class="launchpad-pill${cat === id ? ' active' : ''}" data-launchpad-category="${id}">${label}</button>`).join('')}</div></div>
@@ -1391,7 +1525,7 @@ function renderLaunchpadTab() {
     ${show('sounds') ? `<h4>🔊 Sound FX &amp; Music</h4><div class="launchpad-grid">${soundCards || '<p class="launchpad-empty">No sounds match your search.</p>'}</div>` : ''}
     ${show('animations') ? `<h4>🎬 Animation Clips</h4><div class="launchpad-grid">${animCards || '<p class="launchpad-empty">No animation clips match your search.</p>'}</div>` : ''}
     ${show('ui') ? `<h4>🧩 Visual UI Blocks</h4><div class="launchpad-grid">${uiCards || '<p class="launchpad-empty">No UI blocks match your search.</p>'}</div>` : ''}
-    <p class="launchpad-note">Want it done for you? Open the <button type="button" class="inline-action" id="launchpadOpenAi">🤖 AI Agent</button> — Omni-Agent 3.0 works offline with zero API key, in English, Hindi and Hinglish.</p>
+    <p class="launchpad-note">Want it done for you? Open the <button type="button" class="inline-action" id="launchpadOpenAi">🤖 AI Agent</button> — Omni-Agent 4.0 works offline with zero API key, in English, Hindi and Hinglish.</p>
   </div>`;
   $('#previewState').textContent = 'Quick Create Launchpad';
   panel.querySelectorAll('[data-experience-mode]').forEach(b => b.addEventListener('click', () => applyExperienceMode(b.dataset.experienceMode)));
@@ -1414,17 +1548,35 @@ function renderLaunchpadTab() {
 }
 
 function currentAiConfigFromForm() {
-  return saveAiConfig({ provider: $('#aiProviderSelect')?.value || 'free-local', apiKey: $('#aiApiKeyInput')?.value || '', model: $('#aiModelInput')?.value || '', experienceMode });
+  const provider = $('#aiProviderSelect')?.value || 'free-local';
+  const apiKey = $('#aiApiKeyInput')?.value || '';
+  const customEndpoint = $('#aiCustomEndpointInput')?.value || '';
+  if (customEndpoint) {
+    const valid = validateAiEndpoint(customEndpoint);
+    if (!valid.ok) throw new Error(valid.error);
+  }
+  return saveAiConfigSecure({
+    provider,
+    apiKey,
+    model: $('#aiModelInput')?.value || '',
+    endpoint: customEndpoint || undefined,
+    rememberApiKey: Boolean($('#aiRememberKeyInput')?.checked),
+    experienceMode,
+  }, { storage: preferenceStore, sessionStorage: sessionStore });
 }
 function renderAiAgentTab() {
   if (currentRightTab !== 'ai') return;
   const panel = $('#previewContent');
-  const cfg = loadAiConfig();
+  const cfg = loadAiConfigSecure({ storage: preferenceStore, sessionStorage: sessionStore });
+  const keyState = aiKeyStatus({ storage: preferenceStore, sessionStorage: sessionStore });
   panel.innerHTML = `<div class="ai-agent-panel">
-    <div class="launchpad-hero"><span class="docs-kicker">ORVEXA OMNI-AGENT 3.0 · OMEGA AI</span><h3>🤖 AI Agent</h3><p>Free Built-In AI works instantly — no API key, no account, in English, Hindi and Hinglish. Hosted providers are optional.</p></div>
+    <div class="launchpad-hero"><span class="docs-kicker">ORVEXA OMNI-AGENT 4.0 · OMEGA AI</span><h3>🤖 AI Agent</h3><p>Free Built-In AI works instantly — no API key, no account, in English, Hindi and Hinglish. Hosted providers are optional.</p></div>
     <label class="ai-field"><span>AI provider</span><select id="aiProviderSelect">${Object.values(AI_PROVIDERS).map(pr => `<option value="${pr.id}"${pr.id === cfg.provider ? ' selected' : ''}>${escapeHtml(pr.name)}${pr.requiresApiKey ? ' (key required)' : ' (zero key)'}</option>`).join('')}</select></label>
-    <label class="ai-field"><span>API key <small>(only for hosted providers — Free Built-In AI needs none)</small></span><input id="aiApiKeyInput" type="password" autocomplete="off" placeholder="Leave empty for Free Built-In AI" value="${escapeAttr(cfg.apiKey || '')}"/></label>
+    <label class="ai-field"><span>API key <small>(hosted providers only — Free Built-In AI needs none)</small></span><input id="aiApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty for Free Built-In AI" value="${escapeAttr(cfg.apiKey || '')}"/></label>
+    <label class="ai-field"><span>Custom endpoint <small>(optional, HTTPS only)</small></span><input id="aiCustomEndpointInput" type="url" inputmode="url" autocomplete="off" placeholder="https://your-proxy.example/v1/chat/completions" value="${escapeAttr(cfg.endpoint || '')}"/></label>
     <label class="ai-field"><span>Model</span><input id="aiModelInput" type="text" value="${escapeAttr(cfg.model || '')}" placeholder="orvexa-local-2.0"/></label>
+    <label class="ai-privacy-toggle"><input id="aiRememberKeyInput" type="checkbox" ${cfg.rememberApiKey ? 'checked' : ''}/> <span>Remember key on this device</span><small>Off by default — keys stay in this tab only. A browser-stored key is never fully secret; use a server proxy for production.</small></label>
+    <p class="ai-key-status" role="status">${keyState.remembered ? '🔐 Key remembered in this browser (opt-in).' : keyState.sessionOnly ? '🔒 Key kept for this tab only.' : '🔓 No hosted key stored. Free Built-In AI is ready.'}</p>
     <div class="ai-wizard"><h4>✨ 3-Click Beginner AI Wizard</h4>
       <label class="ai-field"><span>1️⃣ What do you want to make?</span><input id="aiWizardGoal" type="text" placeholder="e.g. ek neon racing game banao / a portfolio website"/></label>
       <label class="ai-field"><span>2️⃣ Pick a style</span><select id="aiWizardStyle"><option value="bright and friendly">Bright &amp; friendly</option><option value="cyber neon">Cyber neon</option><option value="nature and calm">Nature &amp; calm</option><option value="royal golden temple">Royal golden temple</option><option value="frosty sky adventure">Frosty sky adventure</option></select></label>
@@ -1436,7 +1588,7 @@ function renderAiAgentTab() {
     <div id="aiVariationsList" class="ai-variations"></div>
     <div class="ai-chips"><h4>⚡ Try a starter prompt (English · Hindi · Hinglish)</h4><div class="ai-chip-row">${listAllPromptChips().map(ch => `<button type="button" class="ai-chip" data-ai-chip="${escapeAttr(ch.prompt)}">${escapeHtml(ch.language)} · ${escapeHtml(ch.prompt.slice(0, 42))}…</button>`).join('')}</div></div>
     <div class="ai-critic-card"><h4>📊 Project Quality Critic</h4><p>Scores rendering, gameplay, performance and accessibility — then offers 1-click upgrades powered by the 20 Omni-Agent tools.</p><button id="aiCriticRunButton" class="button secondary" type="button">📊 Critique my project</button><div id="aiCriticOutput" class="ai-critic-output">${lastCriticReport ? escapeHtml(lastCriticReport.summary) : 'No critique yet — press the button after running your project.'}</div><div id="aiCriticUpgrades" class="ai-critic-upgrades"></div></div>
-    <div class="ai-tools-list"><h4>🤖 Omni-Agent 3.0 tools (${ORVEXA_AI_TOOLS.length})</h4><div class="ai-tool-grid">${ORVEXA_AI_TOOLS.map(x => `<button type="button" class="ai-tool-button" data-ai-tool="${escapeAttr(x.id)}" title="${escapeAttr(x.description)}"><strong>${escapeHtml(x.label)}</strong><span>${escapeHtml(x.category)}</span></button>`).join('')}</div></div>
+    <div class="ai-tools-list"><h4>🤖 Omni-Agent 4.0 tools (${ORVEXA_AI_TOOLS.length})</h4><div class="ai-tool-grid">${ORVEXA_AI_TOOLS.map(x => `<button type="button" class="ai-tool-button" data-ai-tool="${escapeAttr(x.id)}" title="${escapeAttr(x.description)}"><strong>${escapeHtml(x.label)}</strong><span>${escapeHtml(x.category)}</span></button>`).join('')}</div></div>
     <div id="aiAgentOutput" class="ai-agent-output">${lastAiAgentOutput ? escapeHtml(lastAiAgentOutput) : 'Agent output will appear here. Tip: try “ek space game banao” — the Free Built-In AI understands Hindi and Hinglish too.'}</div>
   </div>`;
   $('#previewState').textContent = 'AI Agent ready';
@@ -1506,10 +1658,12 @@ function renderAiAgentTab() {
     } catch (error) { toast(error.message, 'error'); }
   }));
   $('#autoFixWithAiButton')?.addEventListener('click', () => {
-    const before = project.files[currentFile] ?? $('#codeEditor').value;
-    const fixed = autoFixProjectSource(before, currentFile);
-    project.files[currentFile] = fixed; $('#codeEditor').value = fixed; updateEditorVisuals(); scheduleSave();
-    setOutput(fixed === before ? 'Auto-Fix: no common errors found — your source already looks clean.' : 'Auto-Fix applied: smart quotes, CRLF and bracket balance repaired. Press Run to verify.');
+    const file = currentFile();
+    const before = project.files[file] ?? $('#codeEditor').value;
+    const fixed = autoFixProjectSource(before, file);
+    project.files[file] = fixed; $('#codeEditor').value = fixed; updateEditorVisuals(); scheduleSave();
+    setOutput(fixed === before ? 'Auto-Fix: no common errors found — your source already looks clean.' : `Auto-Fix applied to ${file}: smart quotes, CRLF and bracket balance repaired. Press Run to verify.`);
+    if (fixed !== before) toast(`Auto-Fix repaired ${file}.`, 'success');
   });
 }
 
@@ -1533,42 +1687,116 @@ function openExample(file) {
   if (project.files[file] !== undefined) { setCurrentFile(file); toast(`Opened ${file}`); return; }
   toast(`Example not found: ${file}`, 'error');
 }
-function addNewFile() {
-  const suggestion = project.folders?.length ? `${project.folders[0]}/new-file.orv` : 'new-file.orv';
-  const requested = prompt('New file path (relative to project root):', suggestion);
+async function addNewFile(suggestionOverride = '') {
+  const suggestion = suggestionOverride || (project.folders?.length ? `${project.folders[0]}/new-file.orv` : 'new-file.orv');
+  const requested = await askText({
+    title: 'Create a file', label: 'File path (relative to the project root)', value: suggestion,
+    placeholder: 'components/header.orv', confirmLabel: 'Create file',
+    help: 'A .orv extension is added automatically when omitted.',
+    validate: (value) => {
+      try {
+        let path = normalizePath(value);
+        if (!/\.[a-z0-9]+$/i.test(path)) path += '.orv';
+        if (project.files[path] !== undefined) return `A file already exists at ${path}.`;
+      } catch (error) { return error.message; }
+      return '';
+    },
+  });
   if (!requested) return;
   try {
     let path = normalizePath(requested);
     if (!/\.[a-z0-9]+$/i.test(path)) path += '.orv';
-    if (project.files[path] !== undefined) { toast('A file with that path already exists.', 'warning'); return; }
     const parent = path.split('/').slice(0, -1).join('/'); if (parent && !project.folders.includes(parent)) project.folders.push(parent);
     project.files[path] = path.endsWith('.orv') ? `app "${path.split('/').at(-1).replace(/\.orv$/i, '')}"\n\nprint("Hello from ${path.split('/').at(-1)}")\n` : '';
     setCurrentFile(path); renderTree(); saveLocal(true); toast(`Created ${path}`, 'success');
   } catch (error) { toast(error.message, 'error'); }
 }
-function addNewFolder() {
-  const requested = prompt('New folder path:', 'components'); if (!requested) return;
+async function addNewFolder() {
+  const requested = await askText({ title: 'Create a folder', label: 'Folder path', value: 'components', confirmLabel: 'Create folder', validate: (value) => { try { const path = normalizePath(value); if (project.folders.includes(path)) return `Folder ${path} already exists.`; } catch (error) { return error.message; } return ''; } });
+  if (!requested) return;
   try { const path = normalizePath(requested); if (!project.folders.includes(path)) project.folders.push(path); renderTree(); saveLocal(true); toast(`Created folder ${path}`, 'success'); }
   catch (error) { toast(error.message, 'error'); }
 }
-function renameActiveFile() {
-  const file = currentFile(); const requested = prompt('Rename current file:', file); if (!requested || requested === file) return;
+async function renameActiveFile(file = currentFile()) {
+  if (!(file in project.files)) { toast('That file no longer exists.', 'warning'); return; }
+  setCurrentFile(file);
+  const requested = await askText({ title: 'Rename file', label: 'New path', value: file, confirmLabel: 'Rename', validate: (value) => {
+    try { const path = normalizePath(value); if (path === file) return ''; if (project.files[path] !== undefined) return `A file already exists at ${path}.`; } catch (error) { return error.message; }
+    return '';
+  } });
+  if (!requested || requested === file) return;
   try {
-    const path = normalizePath(requested); if (project.files[path] !== undefined) throw new Error('A file already exists at that path.');
+    const path = normalizePath(requested);
+    if (project.files[path] !== undefined) throw new Error('A file already exists at that path.');
+    const parent = path.split('/').slice(0, -1).join('/'); if (parent && !project.folders.includes(parent)) project.folders.push(parent);
     project.files[path] = project.files[file]; delete project.files[file];
     if (project.activeFile === file) project.activeFile = path;
-    renderTree(); setCurrentFile(path); saveLocal(true); toast(`Renamed to ${path}`, 'success');
+    editorTabState = renameTab(editorTabState, file, path);
+    setCurrentFile(path, { openInTabs: false }); renderTree(); saveLocal(true); toast(`Renamed to ${path}`, 'success');
   } catch (error) { toast(error.message, 'error'); }
 }
-function deleteActiveFile() {
-  const file = currentFile(); if (Object.keys(project.files).length <= 1) { toast('Keep at least one file in the project.', 'warning'); return; }
-  if (!confirm(`Delete "${file}" from this project?`)) return;
-  delete project.files[file]; project.activeFile = Object.keys(project.files).find((f) => f.endsWith('.orv')) || Object.keys(project.files)[0];
-  setCurrentFile(project.activeFile); renderTree(); saveLocal(true); toast(`Deleted ${file}`, 'success');
+async function deleteActiveFile(file = currentFile()) {
+  if (Object.keys(project.files).length <= 1) { toast('Keep at least one file in the project.', 'warning'); return; }
+  if (preferences.confirmDestructive) {
+    const ok = await askConfirm({ title: 'Delete file?', message: `Delete "${file}" from this project?`, details: 'A snapshot can bring it back if you saved one. Export a project ZIP for a permanent backup.', confirmLabel: 'Delete file', danger: true });
+    if (!ok) return;
+  }
+  delete project.files[file];
+  editorTabState = closeTab(editorTabState, file);
+  const next = Object.keys(project.files).find((f) => f.endsWith('.orv')) || Object.keys(project.files)[0];
+  syncEditorTabsAfterFileChange(next); renderTree(); saveLocal(true); toast(`Deleted ${file}`, 'success');
 }
-function downloadCurrentFile() {
-  const file = currentFile(); const type = file.endsWith('.orv') ? 'text/plain;charset=utf-8' : 'application/octet-stream';
-  downloadBlob(new Blob([contentOf(file)], { type }), file.split('/').at(-1)); toast(`Downloaded ${file}`, 'success');
+function downloadCurrentFile(file = currentFile()) {
+  if (!(file in project.files)) { toast('That file no longer exists.', 'warning'); return; }
+  const type = file.endsWith('.orv') || file.endsWith('.realm') ? 'text/plain;charset=utf-8' : 'application/octet-stream';
+  downloadBlob(new Blob([project.files[file]], { type }), file.split('/').at(-1)); toast(`Downloaded ${file}`, 'success');
+}
+async function duplicateActiveFile(file = currentFile()) {
+  if (!(file in project.files)) return;
+  const base = file.replace(/(\.[a-z0-9]+)$/i, '');
+  const ext = file.match(/(\.[a-z0-9]+)$/i)?.[1] || '.orv';
+  const requested = await askText({ title: 'Duplicate file', label: 'New path for the copy', value: `${base}-copy${ext}`, confirmLabel: 'Duplicate', validate: (value) => { try { const path = normalizePath(value); if (project.files[path] !== undefined) return `A file already exists at ${path}.`; } catch (error) { return error.message; } return ''; } });
+  if (!requested) return;
+  try {
+    const path = normalizePath(requested);
+    if (project.files[path] !== undefined) throw new Error('A file already exists at that path.');
+    project.files[path] = project.files[file];
+    setCurrentFile(path); renderTree(); saveLocal(true); toast(`Duplicated to ${path}`, 'success');
+  } catch (error) { toast(error.message, 'error'); }
+}
+async function renameProject() {
+  const requested = await askText({ title: 'Rename project', label: 'Project name', value: project.name, maxLength: 100, confirmLabel: 'Rename project' });
+  if (!requested) return;
+  project.name = requested.slice(0, 100); renderTree(); saveLocal(true); toast('Project renamed.', 'success');
+}
+async function renameFolder(folder) {
+  const requested = await askText({ title: 'Rename folder', label: 'New folder path', value: folder, confirmLabel: 'Rename folder', validate: (value) => { try { const destination = normalizePath(value); if (destination.startsWith(`${folder}/`)) return 'A folder cannot be moved inside itself.'; if (project.folders.includes(destination)) return `Folder ${destination} already exists.`; } catch (error) { return error.message; } return ''; } });
+  if (!requested || requested === folder) return;
+  try {
+    const destination = normalizePath(requested);
+    if (destination.startsWith(`${folder}/`)) throw new Error('A folder cannot be moved inside itself.');
+    const moves = Object.keys(project.files).filter((path) => path.startsWith(`${folder}/`));
+    for (const path of moves) { const next = normalizePath(`${destination}/${path.slice(folder.length + 1)}`); if (project.files[next] !== undefined) throw new Error(`A file already exists at ${next}.`); }
+    const nextFiles = { ...project.files };
+    for (const path of moves) { const next = `${destination}/${path.slice(folder.length + 1)}`; nextFiles[next] = project.files[path]; delete nextFiles[path]; editorTabState = renameTab(editorTabState, path, next); }
+    project.files = nextFiles;
+    project.folders = project.folders.map((path) => path === folder ? destination : path.startsWith(`${folder}/`) ? `${destination}/${path.slice(folder.length + 1)}` : path);
+    if (!project.folders.includes(destination)) project.folders.push(destination);
+    if (project.activeFile && !project.files[project.activeFile]) project.activeFile = moves.length ? `${destination}/${moves[0].slice(folder.length + 1)}` : currentFile();
+    renderTree(); syncEditorTabsAfterFileChange(project.activeFile); saveLocal(true); toast(`Renamed folder to ${destination}`, 'success');
+  } catch (error) { toast(error.message, 'error'); }
+}
+async function deleteFolder(folder) {
+  const filesToDelete = Object.keys(project.files).filter((path) => path.startsWith(`${folder}/`));
+  if (preferences.confirmDestructive) {
+    const ok = await askConfirm({ title: 'Delete folder?', message: `Delete "${folder}" and all ${filesToDelete.length} file(s) inside it?`, details: 'Export a project ZIP first if you want a permanent backup.', confirmLabel: 'Delete folder', danger: true });
+    if (!ok) return;
+  }
+  filesToDelete.forEach((path) => { delete project.files[path]; editorTabState = closeTab(editorTabState, path); });
+  project.folders = project.folders.filter((path) => path !== folder && !path.startsWith(`${folder}/`));
+  if (!Object.keys(project.files).length) project.files['main.orv'] = `app "Orvexa App"\n`;
+  const next = Object.keys(project.files).find((path) => path.endsWith('.orv')) || Object.keys(project.files)[0];
+  syncEditorTabsAfterFileChange(next); renderTree(); saveLocal(true); toast(`Deleted folder ${folder}`, 'success');
 }
 function exportProject() {
   try { if (lastResult?.scenes) for (const scene of lastResult.scenes) persistSceneState(scene); saveLocal(); const blob = exportProjectZip(project); downloadBlob(blob, `${safeFilename(project.name)}-Orvexa-Project.zip`); addBuildLog('info', `Exported complete project ZIP with ${Object.keys(project.files).length} source files, ${Object.keys(project.sceneState||{}).length} persisted scenes, model data and engine settings.`); toast('Full project backup ZIP created with source, scenes, models and settings.', 'success'); }
@@ -1582,8 +1810,12 @@ async function onImportFile(file) {
   if (!file) return;
   try {
     const imported = await importProjectFile(file);
-    if (!confirm(`Import "${imported.name}" with ${Object.keys(imported.files).length} file(s)? The current in-browser project will be replaced. Download a ZIP first if you want a backup.`)) return;
-    project = imported; stateStore = new Map(); lastResult = null; activeInterpreter = null; baseConsoleLogs = []; pendingEventLogs = []; saveLocal(); renderTree(); setCurrentFile(project.activeFile); renderPreview(null); renderConsole([]); updateDiagnostics(null); activateRightTab('preview'); toast('Project imported. Review its source before running it.', 'success');
+    if (preferences.confirmDestructive) {
+      createProjectSnapshot(project.files, `Before import · ${project.name}`, preferenceStore);
+      const ok = await askConfirm({ title: 'Import project?', message: `Import "${imported.name}" with ${Object.keys(imported.files).length} file(s)?`, details: 'The current in-browser project will be replaced. A safety snapshot of the current files was just created.', confirmLabel: 'Import project', danger: true });
+      if (!ok) return;
+    }
+    project = imported; stateStore = new Map(); lastResult = null; activeInterpreter = null; baseConsoleLogs = []; pendingEventLogs = []; editorTabState = createTabState(project.activeFile, project.activeFile ? [project.activeFile] : []); saveLocal(); renderTree(); setCurrentFile(project.activeFile); renderPreview(null); renderConsole([]); updateDiagnostics(null); activateRightTab('preview'); healthAuditDirty = true; toast('Project imported. Review its source before running it.', 'success');
   } catch (error) { toast(`Import failed: ${error.message}`, 'error'); }
 }
 function buildWebsite() {
@@ -1636,14 +1868,362 @@ function insertCompletion(index=autocompleteIndex) {
   editor.setRangeText(item[0],from,end,'end'); menuHide(); saveEditorToProject(); refreshHighlights(); editor.focus();
 }
 function menuHide(){const menu=$('#autocompleteMenu');if(menu)menu.hidden=true;}
-const COMMANDS = [
-  ['Run current program','Ctrl + Enter',()=>runProgram({source:$('#codeEditor').value})],['Format source','',()=>formatBasicIndent()],['Save project','Ctrl + S',()=>saveLocal(true)],['Export project ZIP','',()=>exportProject()],['Import project','',()=>importProject()],['Download current file','',()=>downloadCurrentFile()],['Open documentation','',()=>activateRightTab('docs')],['Open website preview','',()=>activateRightTab('preview')],['Open 3D scene','',()=>activateRightTab('scene')],['Toggle theme','',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light')],['New file','',()=>addNewFile()],['Rename current file','',()=>renameActiveFile()],['Delete current file','',()=>deleteActiveFile()]
-];
-function openCommandPalette(){
-  document.querySelector('.command-palette-backdrop')?.remove(); const backdrop=document.createElement('div');backdrop.className='command-palette-backdrop';backdrop.innerHTML='<div class="command-palette" role="dialog" aria-modal="true" aria-label="Command palette"><input id="commandSearch" placeholder="Search commands…" autocomplete="off"><div class="command-list" id="commandList"></div></div>';document.body.append(backdrop);
-  const input=backdrop.querySelector('#commandSearch'),list=backdrop.querySelector('#commandList');
-  const render=()=>{const q=input.value.toLowerCase();list.innerHTML=COMMANDS.filter(c=>c[0].toLowerCase().includes(q)).map((c,i)=>`<button class="command-item" data-command="${COMMANDS.indexOf(c)}"><span>${escapeHtml(c[0])}</span><small>${escapeHtml(c[1])}</small></button>`).join('')||'<p class="docs-no-results">No commands found.</p>';list.querySelectorAll('[data-command]').forEach(b=>b.addEventListener('click',()=>{const command=COMMANDS[Number(b.dataset.command)];backdrop.remove();command?.[2]();}));};
-  input.addEventListener('input',render);backdrop.addEventListener('click',e=>{if(e.target===backdrop)backdrop.remove();});input.addEventListener('keydown',e=>{if(e.key==='Escape'){backdrop.remove();return;}if(e.key==='Enter')list.querySelector('button')?.click();});render();input.focus();
+function getPaletteCommands() {
+  const command = (id, label, category, combo, run, description = '', keywords = []) => ({ id, label, category, combo, run, description, keywords });
+  return [
+    command('run', 'Run current program', 'Run', 'mod+enter', () => runProgram({ source: $('#codeEditor').value }), 'Execute the active file', ['execute', 'play']),
+    command('save', 'Save project', 'Project', 'mod+s', () => saveLocal(true), 'Write the project to browser storage'),
+    command('export-project', 'Export project ZIP', 'Project', '', () => exportProject(), 'Complete source, scenes and settings'),
+    command('import-project', 'Import project…', 'Project', '', () => importProject(), 'Open a .orv, JSON or ZIP project'),
+    command('new-file', 'New file…', 'Project', '', () => addNewFile(), 'Create a source file'),
+    command('new-folder', 'New folder…', 'Project', '', () => addNewFolder(), 'Organise files into folders'),
+    command('rename-file', 'Rename current file…', 'Project', '', () => renameActiveFile(), 'Change the active file path'),
+    command('duplicate-file', 'Duplicate current file…', 'Project', '', () => duplicateActiveFile(), 'Make a copy of the active file'),
+    command('delete-file', 'Delete current file…', 'Project', '', () => deleteActiveFile(), 'Remove the active file after confirmation'),
+    command('project-search', 'Search project…', 'Navigate', 'mod+shift+f', () => openProjectSearch(), 'Find text across every source file'),
+    command('quick-open', 'Quick open a file…', 'Navigate', 'mod+k', () => openCommandPalette({ mode: 'files' }), 'Fuzzy file switcher'),
+    command('find', 'Find in current file', 'Navigate', 'mod+f', () => openFind(), 'Search inside the active editor'),
+    command('home', 'Open Home', 'Navigate', '', () => activateRightTab('home'), 'Templates, quests, lessons and health'),
+    command('launchpad', 'Open Quick Create', 'Navigate', '', () => activateRightTab('launchpad'), 'Games, websites, prefabs and moods'),
+    command('ai', 'Open AI Agent', 'Navigate', '', () => activateRightTab('ai'), 'Build with the offline Omni-Agent'),
+    command('scene', 'Open 3D Scene', 'Navigate', '', () => activateRightTab('scene'), 'WebGL scene workbench'),
+    command('world', 'Play Aetherfall', 'Navigate', '', () => activateRightTab('game'), 'Open the playable open world'),
+    command('docs', 'Open documentation', 'Navigate', '', () => activateRightTab('docs'), 'Language and feature handbook'),
+    command('project-health', 'Audit project health', 'Quality', '', () => openProjectHealthDialog(), 'Structure, imports, syntax and size audit'),
+    command('format', 'Format indentation', 'Editor', '', () => formatBasicIndent(), 'Normalise indentation in the active file'),
+    command('toggle-theme', 'Toggle light / dark theme', 'Appearance', '', () => toggleTheme(), 'Switch the visual theme'),
+    command('cycle-accent', 'Cycle accent colour', 'Appearance', '', () => cycleAccent(), 'Move to the next accent palette'),
+    command('cycle-density', 'Cycle interface density', 'Appearance', '', () => cycleDensity(), 'Compact, comfortable, spacious'),
+    command('settings', 'Open Settings…', 'Appearance', 'mod+,', () => openSettings(), 'Theme, editor, accessibility, privacy and data'),
+    command('shortcuts', 'Keyboard shortcuts', 'Help', 'f1', () => openShortcutsHelp(), 'Show every registered shortcut'),
+    command('snapshot', 'Take a project snapshot', 'Quality', '', () => { const snap = createProjectSnapshot({ ...project.files, [currentFile()]: $('#codeEditor')?.value ?? project.files[currentFile()] }, `${project.name || 'Project'} · ${new Date().toLocaleTimeString()}`, preferenceStore); toast(`📸 Snapshot saved: ${snap.label}`, 'success'); }, 'Save a restorable copy of every file'),
+    command('share-card', 'Download share card', 'Publish', '', () => downloadShareCard(), 'A 1200×630 SVG card for your creation'),
+    command('build-website', 'Build static website', 'Publish', '', () => buildWebsite(), 'Export the current page as static HTML'),
+    command('export-data', 'Export all Studio data', 'Data', '', () => exportAllData(), 'Preferences, project, snapshots and logs'),
+    command('replay-tour', 'Replay welcome tour', 'Help', '', () => startTour(), 'Guided tour for beginners'),
+    command('install', 'Install Orvexa Studio', 'App', '', () => installManager.promptInstall(), getInstallState().canInstall ? 'Install as a desktop/PWA app' : 'Install is offered by your browser over HTTPS'),
+    command('safe-mode', readSafeMode() ? 'Leave safe mode' : 'Enter safe mode', 'App', '', () => (readSafeMode() ? leaveSafeMode() : enterSafeMode()), 'Start without live previews when a scene keeps crashing'),
+  ];
+}
+function openPaletteCommands() { return buildPaletteCommands(); }
+function buildPaletteCommands() {
+  return getPaletteCommands().map((entry) => ({
+    ...entry,
+    disabled: entry.id === 'install' ? !getInstallState().canInstall : false,
+    keywords: [entry.description, ...(entry.keywords || [])].filter(Boolean),
+  }));
+}
+function getRecentFiles() {
+  return [...editorTabState.tabs].reverse().slice(0, 6);
+}
+function rememberPaletteCommand(id) {
+  if (!id) return;
+  recentCommandIds = [id, ...recentCommandIds.filter((entry) => entry !== id)].slice(0, 8);
+  preferenceStore.setJSON('recent-commands', recentCommandIds);
+}
+function openCommandPalette({ mode = 'all' } = {}) {
+  const commands = buildPaletteCommands();
+  if (mode === 'files') {
+    return showCommandPalette({
+      commands: [], files: Object.keys(project.files), recentCommandIds: [], recentFiles: getRecentFiles(), isMac: platformIsMac,
+      onOpenFile: (path) => { setCurrentFile(path); announce(`Opened ${path}`); },
+    });
+  }
+  return showCommandPalette({
+    commands,
+    files: Object.keys(project.files).map((path) => ({ path })),
+    recentCommandIds,
+    recentFiles: getRecentFiles(),
+    isMac: platformIsMac,
+    onRun: (entry, command) => { if (command?.run) { rememberPaletteCommand(command.id); command.run(); } },
+    onOpenFile: (path) => { setCurrentFile(path); announce(`Opened ${path}`); },
+    onRecent: rememberPaletteCommand,
+  });
+}
+function toggleTheme() {
+  const resolved = resolveTheme(preferences);
+  persistPreferences(setPreference(preferences, 'theme', resolved === 'light' ? 'dark' : 'light'));
+  toast(`${resolveTheme(preferences) === 'light' ? 'Light' : 'Dark'} theme applied.`, 'success');
+}
+function cycleAccent() {
+  const index = ACCENTS.findIndex((accent) => accent.id === preferences.accent);
+  const next = ACCENTS[(index + 1) % ACCENTS.length];
+  persistPreferences(setPreference(preferences, 'accent', next.id));
+  toast(`Accent: ${next.name}`, 'success');
+}
+function cycleDensity() {
+  const order = ['compact', 'comfortable', 'spacious'];
+  const next = order[(order.indexOf(preferences.density) + 1) % order.length];
+  persistPreferences(setPreference(preferences, 'density', next));
+  toast(`Density: ${next}`, 'success');
+}
+function downloadShareCard() {
+  const source = project.files[currentFile()] || '';
+  const svg = buildShareCardSvg({ title: project.name || 'My Orvexa Creation', kind: /scene\s+"/.test(source) ? 'game' : 'web', lines: source.split('\n').length, accent: getActiveAccent().color });
+  const anchor = document.createElement('a');
+  anchor.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  anchor.download = 'orvexa-share-card.svg';
+  anchor.click();
+  toast('🖼️ Share card downloaded.', 'success');
+}
+function getActiveAccent() { return ACCENTS.find((accent) => accent.id === preferences.accent) || ACCENTS[0]; }
+function getInstallState() { return installManager.getState(); }
+function openShortcutsHelp() {
+  return openShortcutsDialog({ groups: shortcutRegistry.helpGroups(), isMac: platformIsMac });
+}
+function openProjectSearch() {
+  return openProjectSearchDialog({
+    files: project.files,
+    onOpen: (path, line, column) => { setCurrentFile(path); jumpTo(line, column); announce(`Opened ${path} at line ${line}`); },
+  });
+}
+function openProjectHealthDialog() {
+  let dialog = null;
+  dialog = openHealthDialog({
+    project,
+    activeFile: currentFile(),
+    onOpenIssue: (issue) => {
+      if (issue.file && project.files[issue.file] !== undefined) { setCurrentFile(issue.file); if (issue.line) jumpTo(issue.line, 1); dialog?.close(); }
+      else toast(issue.fix || issue.detail, 'info');
+    },
+    onRefresh: () => ({ ...project, files: { ...project.files, [currentFile()]: $('#codeEditor')?.value ?? project.files[currentFile()] } }),
+    onCopy: (text) => copyText(text),
+  });
+  healthAuditDirty = false;
+  return dialog;
+}
+function currentHealthSummary() {
+  if (healthAuditDirty || !lastHealthAudit) {
+    lastHealthAudit = healthSummary(auditProject(project, { activeFile: currentFile() }));
+    healthAuditDirty = false;
+  }
+  return lastHealthAudit;
+}
+
+function persistPreferences(next, { silent = false } = {}) {
+  preferences = normalizePreferences(next);
+  applyPreferences(preferences);
+  const saved = savePreferences(preferences, preferenceStore);
+  applyEditorPreferences();
+  updateThemeButton();
+  if (!saved.ok && !silent) toast('Preferences could not be saved — browser storage is blocked or full.', 'warning');
+  return preferences;
+}
+function applyEditorPreferences() {
+  const editor = $('#codeEditor');
+  if (!editor) return;
+  editor.style.tabSize = String(preferences.tabSize);
+  editor.setAttribute('wrap', preferences.wordWrap ? 'soft' : 'off');
+  const gutter = $('#lineNumbers');
+  if (gutter) gutter.hidden = !preferences.showLineNumbers;
+}
+function updateThemeButton() {
+  const button = $('#themeButton');
+  if (!button) return;
+  const resolved = resolveTheme(preferences);
+  button.textContent = resolved === 'light' ? '☾' : '☼';
+  button.setAttribute('aria-label', `Switch theme (currently ${resolved})`);
+  button.title = `Switch theme (currently ${resolved})`;
+}
+async function refreshStorageEstimate() {
+  const [estimate, localUsage] = await Promise.all([estimateStorage(), Promise.resolve(preferenceStore.usage())]);
+  storageEstimate = { ...estimate, localBytes: localUsage.bytes, localKeys: localUsage.keys };
+  return storageEstimate;
+}
+function copyText(text) {
+  const value = String(text ?? '');
+  if (!value) return Promise.resolve(false);
+  try {
+    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(value).then(() => true).catch(() => fallbackCopy(value));
+  } catch { return Promise.resolve(fallbackCopy(value)); }
+  return Promise.resolve(fallbackCopy(value));
+}
+function fallbackCopy(value) {
+  try {
+    const area = document.createElement('textarea');
+    area.value = value; area.setAttribute('readonly', ''); area.style.position = 'fixed'; area.style.opacity = '0';
+    document.body.append(area); area.select(); const ok = document.execCommand('copy'); area.remove(); return ok;
+  } catch { return false; }
+}
+function diagnosticsText() {
+  const errors = readErrorLog(sessionStore);
+  return [
+    `${APP_VERSION_LABEL} (${APP_VERSION})`,
+    `URL: ${location.href}`,
+    `Time: ${new Date().toISOString()}`,
+    `Platform: ${navigator.platform || 'unknown'} · ${navigator.userAgent}`,
+    `Display: ${window.innerWidth}×${window.innerHeight} · DPR ${window.devicePixelRatio || 1}`,
+    `Network: ${getNetworkStatus().label}`,
+    `Preferences: ${JSON.stringify(preferences)}`,
+    `Storage: ${JSON.stringify(storageEstimate)}`,
+    `Service worker: ${serviceWorkerSupported() ? 'supported' : 'unsupported'}`,
+    `Recent errors: ${errors.length}`,
+    ...errors.slice(0, 5).map((entry) => `- ${entry.at} ${entry.category}: ${entry.message}${entry.meta?.source ? ` (${entry.meta.source})` : ''}`),
+  ].join('\n');
+}
+async function openSettings() {
+  await refreshStorageEstimate();
+  const keyState = aiKeyStatus({ storage: preferenceStore, sessionStorage: sessionStore });
+  activeSettingsDialog = openSettingsDialog({
+    preferences,
+    appVersion: APP_VERSION,
+    storage: storageEstimate,
+    errorCount: readErrorLog(sessionStore).length,
+    aiKeyStored: keyState.stored,
+    canInstall: getInstallState().canInstall,
+    isStandalone: isStandalone(),
+    onChange: (next, options = {}) => { persistPreferences(next); if (options.reset) { applyPreferences(preferences); toast('Preferences reset to defaults.', 'success'); } },
+    onClose: () => { activeSettingsDialog = null; },
+    onExportData: exportAllData,
+    onImportData: importAllData,
+    onClearSnapshots: clearSnapshotsAction,
+    onClearErrors: () => { clearErrorLog(sessionStore); toast('Error log cleared.', 'success'); },
+    onResetData: resetAllData,
+    onInstall: () => installManager.promptInstall(),
+    onShowTour: startTour,
+    onForgetAiKey: () => { forgetStoredAiKey({ storage: preferenceStore, sessionStorage: sessionStore }); toast('Stored AI key forgotten.', 'success'); if (currentRightTab === 'ai') renderAiAgentTab(); },
+    onCopyDiagnostics: () => copyText(diagnosticsText()),
+  });
+  return activeSettingsDialog;
+}
+function exportAllData() {
+  try {
+    const payload = createDataExport({ local: preferenceStore, session: sessionStore, appVersion: APP_VERSION });
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `orvexa-data-${new Date().toISOString().slice(0, 10)}.json`);
+    toast('All local Studio data exported as JSON.', 'success');
+  } catch (error) { toast(`Data export failed: ${error.message}`, 'error'); }
+}
+async function importAllData(file) {
+  if (!file) return;
+  try {
+    const payload = JSON.parse(await file.text());
+    if (preferences.confirmDestructive) {
+      const ok = await askConfirm({ title: 'Import Studio data?', message: 'This replaces the current project, preferences, snapshots and logs in this browser.', details: 'The Studio will reload after a successful import.', confirmLabel: 'Import and reload', danger: true });
+      if (!ok) return;
+    }
+    const result = importDataExport(payload, { local: preferenceStore, session: sessionStore });
+    toast(`Imported ${result.imported} of ${result.keys} data keys${result.failed ? ` (${result.failed} failed)` : ''}. Reloading…`, result.failed ? 'warning' : 'success');
+    setTimeout(() => location.reload(), 900);
+  } catch (error) { toast(`Data import failed: ${error.message}`, 'error'); }
+}
+async function clearSnapshotsAction() {
+  const snapshots = listProjectSnapshots(preferenceStore);
+  if (!snapshots.length) { toast('There are no snapshots to clear.', 'info'); return; }
+  if (preferences.confirmDestructive) {
+    const ok = await askConfirm({ title: 'Clear snapshots?', message: `Delete all ${snapshots.length} saved snapshot(s)?`, confirmLabel: 'Clear snapshots', danger: true });
+    if (!ok) return;
+  }
+  clearProjectSnapshots(preferenceStore);
+  toast('Snapshots cleared.', 'success');
+  if (currentRightTab === 'home') renderHomeTab();
+}
+async function resetAllData() {
+  try {
+    const localCount = preferenceStore.clearNamespace();
+    sessionStore.clearNamespace();
+    toast(`Cleared ${localCount} local Studio keys. Reloading…`, 'success');
+    setTimeout(() => location.reload(), 700);
+  } catch (error) { toast(`Could not clear data: ${error.message}`, 'error'); }
+}
+function showAppError(entry, error = null) {
+  const banner = $('#appErrorBanner');
+  if (!banner) return;
+  banner.hidden = false;
+  const title = $('#appErrorTitle');
+  const text = $('#appErrorText');
+  if (title) title.textContent = entry?.title || 'Something went wrong';
+  if (text) text.textContent = entry?.hint || 'Your project is autosaved. Reload if the problem continues.';
+  const details = $('#errorDetailsButton');
+  if (details) details.onclick = () => {
+    const errors = readErrorLog(sessionStore);
+    openDialog({
+      title: 'Error details',
+      subtitle: 'Recent runtime errors from this tab. Nothing is sent anywhere.',
+      size: 'large',
+      body: `<pre class="error-log-pre">${escapeHtml(errors.map((item) => `${item.at} · ${item.category}\n${item.message}\n${item.meta?.stack || ''}`).join('\n\n') || 'No saved errors.').split('\n').slice(0, 200).join('\n')}</pre>`,
+      footer: `<button type="button" class="button secondary" data-copy-errors>Copy details</button><button type="button" class="button primary" data-dialog-close-ok>Close</button>`,
+      onMount: ({ card, close }) => {
+        card.querySelector('[data-copy-errors]')?.addEventListener('click', () => copyText(diagnosticsText()));
+        card.querySelector('[data-dialog-close-ok]')?.addEventListener('click', close);
+      },
+    });
+  };
+  recordError(error || new Error(entry?.technical || entry?.message || 'Unknown error'), { storage: sessionStore, meta: { source: entry?.meta?.source || 'app' } });
+  try { announce(`${entry?.title || 'Error'}: ${entry?.hint || ''}`, { politeness: 'assertive' }); } catch { /* ignore */ }
+  toast(entry?.title || 'Something went wrong', 'error');
+}
+function updateNetworkBadge(status = getNetworkStatus()) {
+  const badge = $('#networkBadge');
+  if (!badge) return;
+  badge.textContent = status.label;
+  badge.title = status.detail;
+  badge.classList.toggle('offline', !status.online);
+}
+function refreshPwaUpdate() {
+  const toastElement = $('#pwaUpdateToast');
+  if (toastElement) toastElement.hidden = !pwaUpdateWorker;
+}
+function setupPwa() {
+  installManager.subscribe((state) => {
+    const button = $('#installAppButton');
+    if (button) button.hidden = !state.canInstall;
+  });
+  $('#installAppButton')?.addEventListener('click', () => installManager.promptInstall());
+  $('#pwaUpdateButton')?.addEventListener('click', () => {
+    if (!pwaUpdateWorker) return;
+    pwaUpdateWorker.postMessage({ type: 'SKIP_WAITING' });
+    setTimeout(() => location.reload(), 120);
+  });
+  $('#pwaUpdateDismiss')?.addEventListener('click', () => { pwaUpdateWorker = null; refreshPwaUpdate(); });
+  onNetworkChange(updateNetworkBadge);
+  if (!serviceWorkerSupported()) return;
+  setTimeout(() => {
+    registerServiceWorker({
+      navigatorRef: navigator,
+      locationRef: location,
+      onUpdate: (worker) => { pwaUpdateWorker = worker; refreshPwaUpdate(); toast('A new Orvexa version is ready — open the update banner to reload.', 'info'); },
+      onError: (error) => { recordError(error, { storage: sessionStore, meta: { source: 'service-worker' } }); },
+    });
+  }, 1600);
+}
+function registerAppShortcuts() {
+  if (shortcutRegistry.list().length) return;
+  const whenNoModal = (context) => !context.modalOpen;
+  const register = (id, combo, label, category, handler, options = {}) => {
+    try {
+      shortcutRegistry.register({ id, combo, label, category, description: options.description || '', allowInEditable: options.allowInEditable !== false, when: options.when || whenNoModal, handler });
+    } catch (error) { console.warn('Shortcut registration skipped:', error.message); }
+  };
+  register('palette', 'mod+k', 'Command palette', 'Navigation', () => openCommandPalette(), { description: 'Search commands and files' });
+  register('palette-alt', 'mod+shift+p', 'Command palette (commands)', 'Navigation', () => openCommandPalette());
+  register('quick-open', 'mod+p', 'Quick open file', 'Navigation', () => openCommandPalette({ mode: 'files' }));
+  register('project-search', 'mod+shift+f', 'Search project', 'Navigation', () => openProjectSearch());
+  register('find', 'mod+f', 'Find in current file', 'Editor', () => openFind(), { description: 'Search inside the active file' });
+  register('save', 'mod+s', 'Save project', 'Project', () => saveLocal(true));
+  register('run', 'mod+enter', 'Run program', 'Run', () => runProgram({ source: $('#codeEditor').value }));
+  register('settings', 'mod+,', 'Open settings', 'Help', () => openSettings());
+  register('shortcuts', 'f1', 'Keyboard shortcuts', 'Help', () => openShortcutsHelp(), { allowInEditable: true });
+  register('tab-next', 'mod+alt+arrowright', 'Next editor tab', 'Editor', () => cycleEditorTab(1));
+  register('tab-prev', 'mod+alt+arrowleft', 'Previous editor tab', 'Editor', () => cycleEditorTab(-1));
+  register('toggle-theme', 'mod+shift+l', 'Toggle theme', 'Appearance', () => toggleTheme());
+  register('health', 'mod+shift+h', 'Audit project health', 'Quality', () => openProjectHealthDialog());
+}
+function cycleEditorTab(direction) {
+  editorTabState = cycleTab(editorTabState, direction);
+  if (editorTabState.active) setCurrentFile(editorTabState.active, { openInTabs: false });
+}
+async function closeEditorTab(path) {
+  if (!editorTabState.tabs.includes(path)) return;
+  if (editorTabState.tabs.length <= 1) { toast('Keep at least one file open.', 'info'); return; }
+  if (path === currentFile() && $('#codeEditor')) project.files[path] = $('#codeEditor').value;
+  if (preferences.confirmDestructive && editorTabState.dirty.includes(path)) {
+    const ok = await askConfirm({ title: 'Close unsaved tab?', message: `"${path}" has unsaved changes in this session. Close it anyway?`, details: 'The project autosave may already contain the latest text. Export a ZIP if you are unsure.', confirmLabel: 'Close tab', danger: true });
+    if (!ok) return;
+  }
+  const wasActive = editorTabState.active === path;
+  editorTabState = closeTab(editorTabState, path);
+  if (wasActive && editorTabState.active) setCurrentFile(editorTabState.active, { openInTabs: false });
+  else renderEditorTabs();
 }
 
 function formatBasicIndent() {
@@ -1657,7 +2237,9 @@ function formatBasicIndent() {
   }).join('\n');
   $('#codeEditor').value = formatted; saveEditorToProject(); toast('Basic indentation formatting applied.', 'success');
 }
-function setTheme(theme) { document.documentElement.dataset.theme = theme; try { localStorage.setItem('orvexa-studio-theme', theme); } catch { /* theme remains active for this session */ } $('#themeButton').textContent = theme === 'light' ? '☾' : '☼'; }
+function setTheme(theme) {
+  persistPreferences(setPreference(preferences, 'theme', theme === 'light' ? 'light' : 'dark'), { silent: true });
+}
 
 function setupSceneTransformGizmo(scene, objectIndex = selectedSceneObjectIndex) {
   const svg = $('#sceneGizmo');
@@ -1865,14 +2447,11 @@ function bindEvents() {
   $('#codeEditor').addEventListener('click', updateCursorPosition);
   $('#codeEditor').addEventListener('keyup', updateCursorPosition);
   $('#codeEditor').addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveLocal(true); }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runProgram({ source: e.currentTarget.value }); }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openFind(); }
     if ((e.ctrlKey || e.metaKey) && e.code === 'Space') { e.preventDefault(); showAutocomplete(); return; }
     if (!$('#autocompleteMenu').hidden && ['ArrowDown','ArrowUp'].includes(e.key)) { e.preventDefault(); autocompleteIndex=(autocompleteIndex+(e.key==='ArrowDown'?1:-1)+autocompleteItems.length)%autocompleteItems.length; $$('[data-completion]',$('#autocompleteMenu')).forEach((b,i)=>b.classList.toggle('active',i===autocompleteIndex)); return; }
     if (!$('#autocompleteMenu').hidden && (e.key==='Tab'||e.key==='Enter')) { e.preventDefault(); insertCompletion(); return; }
     if (e.key==='Escape') menuHide();
-    if (e.key === 'Tab') { e.preventDefault(); const start = e.currentTarget.selectionStart, end = e.currentTarget.selectionEnd, value = e.currentTarget.value; e.currentTarget.value = value.slice(0, start) + '    ' + value.slice(end); e.currentTarget.setSelectionRange(start + 4, start + 4); saveEditorToProject(); }
+    if (e.key === 'Tab') { e.preventDefault(); const start = e.currentTarget.selectionStart, end = e.currentTarget.selectionEnd, value = e.currentTarget.value; const indent = ' '.repeat(preferences.tabSize); e.currentTarget.value = value.slice(0, start) + indent + value.slice(end); e.currentTarget.setSelectionRange(start + indent.length, start + indent.length); saveEditorToProject(); }
     if (e.key === 'Enter') {
       const value = e.currentTarget.value, caret = e.currentTarget.selectionStart, lineStart = value.lastIndexOf('\n', caret - 1) + 1, indent = value.slice(lineStart, caret).match(/^\s*/)?.[0] || '';
       if (indent) { e.preventDefault(); e.currentTarget.setRangeText(`\n${indent}`, caret, e.currentTarget.selectionEnd, 'end'); saveEditorToProject(); }
@@ -1888,16 +2467,48 @@ function bindEvents() {
   $('#refreshPreviewButton').addEventListener('click', () => runProgram({ source: $('#codeEditor').value }));
   $('#saveButton').addEventListener('click', () => saveLocal(true));
   $('#buildButton').addEventListener('click', buildWebsite);
-  $('#stopButton').setAttribute('aria-label', 'Stop is not available because execution is synchronous in this version');
   $('#exportButton').addEventListener('click', exportProject);
   $('#downloadButton').addEventListener('click', downloadCurrentFile);
   $('#importButton').addEventListener('click', importProject);
   $('#importInput').addEventListener('change', (e) => onImportFile(e.target.files?.[0]));
   $('#newFileButton').addEventListener('click', addNewFile);
   $('#newFolderButton').addEventListener('click', addNewFolder);
-  $('#explorerMenuButton').addEventListener('click', () => { const action = prompt('Project action: rename project, rename file, delete file, build, or export', 'rename project'); if (action === 'rename project') { const name = prompt('Project name:', project.name); if (name?.trim()) { project.name = name.trim().slice(0, 100); renderTree(); saveLocal(true); } } else if (action === 'rename file') renameActiveFile(); else if (action === 'delete file') deleteActiveFile(); else if (action === 'build') buildWebsite(); else if (action === 'export') exportProject(); else if (action) toast('Choose rename project, rename file, delete file, build, or export.', 'warning'); });
-  $('#editorMenuButton').addEventListener('click', () => { const action = prompt('Editor action: rename file, delete file, or download file', 'rename file'); if (action?.toLowerCase() === 'rename file') renameActiveFile(); else if (action?.toLowerCase() === 'delete file') deleteActiveFile(); else if (action?.toLowerCase() === 'download file') downloadCurrentFile(); else if (action) toast('Action not recognized.', 'warning'); });
-  $('#projectNameButton').addEventListener('click', () => { const name = prompt('Project name:', project.name); if (name?.trim()) { project.name = name.trim().slice(0, 100); renderTree(); saveLocal(true); } });
+  $('#explorerMenuButton').addEventListener('click', (event) => openMenu({
+    anchor: event.currentTarget,
+    title: 'Project actions',
+    items: [
+      { icon: '✎', label: 'Rename project…', onSelect: renameProject },
+      { icon: '＋', label: 'New file…', onSelect: () => addNewFile() },
+      { icon: '▰', label: 'New folder…', onSelect: addNewFolder },
+      { separator: true },
+      { icon: '♥', label: 'Project health', badge: `${currentHealthSummary().score}`, onSelect: openProjectHealthDialog },
+      { icon: '📸', label: 'Take snapshot', onSelect: () => { const snap = createProjectSnapshot({ ...project.files, [currentFile()]: $('#codeEditor')?.value ?? project.files[currentFile()] }, `${project.name || 'Project'} · ${new Date().toLocaleTimeString()}`, preferenceStore); toast(`📸 Snapshot saved: ${snap.label}`, 'success'); } },
+      { separator: true },
+      { icon: '▶', label: 'Build static website', onSelect: buildWebsite },
+      { icon: '⇩', label: 'Export project ZIP', onSelect: exportProject },
+      { icon: '⇧', label: 'Import project…', onSelect: importProject },
+      { separator: true },
+      { icon: '⚙', label: 'Settings…', shortcut: formatCombo('mod+,', { isMac: platformIsMac }), onSelect: openSettings },
+    ],
+  }));
+  $('#editorMenuButton').addEventListener('click', (event) => openMenu({
+    anchor: event.currentTarget,
+    title: 'Editor actions',
+    items: [
+      { icon: '⌘', label: 'Quick open file…', onSelect: () => openCommandPalette({ mode: 'files' }) },
+      { icon: '✎', label: 'Rename file…', onSelect: () => renameActiveFile() },
+      { icon: '⧉', label: 'Duplicate file…', onSelect: () => duplicateActiveFile() },
+      { icon: '⇩', label: 'Download file', onSelect: () => downloadCurrentFile() },
+      { icon: '⧉', label: 'Copy file path', onSelect: () => copyText(currentFile()) },
+      { separator: true },
+      { icon: '⌕', label: 'Find in file', shortcut: formatCombo('mod+f', { isMac: platformIsMac }), onSelect: openFind },
+      { icon: '⌕', label: 'Search project…', shortcut: formatCombo('mod+shift+f', { isMac: platformIsMac }), onSelect: openProjectSearch },
+      { icon: '≣', label: 'Format indentation', onSelect: formatBasicIndent },
+      { separator: true },
+      { icon: '✕', label: 'Delete file…', danger: true, onSelect: () => deleteActiveFile() },
+    ],
+  }));
+  $('#projectNameButton').addEventListener('click', renameProject);
   $('#findButton').addEventListener('click', openFind); $('#findClose').addEventListener('click', closeFind);
   $('#findInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); moveToMatch(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') closeFind(); });
   $('#findInput').addEventListener('input', () => moveToMatch(1)); $('#findNext').addEventListener('click', () => moveToMatch(1)); $('#findPrev').addEventListener('click', () => moveToMatch(-1));
@@ -1910,63 +2521,178 @@ function bindEvents() {
   $('#exampleList').addEventListener('click', (e) => { const button = e.target.closest('[data-example]'); if (button) openExample(button.dataset.example); });
   $('#fileTree').addEventListener('click', (e) => { const button = e.target.closest('[data-path]'); if (!button) return; const path = button.dataset.path; if (button.dataset.kind === 'file') setCurrentFile(path); else { const hasContent = Object.keys(project.files).some((f) => f.startsWith(`${path}/`)); if (hasContent) { const current = button.classList.toggle('folder-collapsed'); button.setAttribute('aria-expanded', String(!current)); $$('.tree-item', $('#fileTree')).forEach((child) => { if (child.dataset.path.startsWith(`${path}/`)) child.hidden = current; }); } else toast(`Folder "${path}" is empty. Add a file to it.`, 'info'); } });
   $('#fileTree').addEventListener('contextmenu', (e) => {
-    const item = e.target.closest('[data-path]'); if (!item) return; e.preventDefault();
+    const item = e.target.closest('[data-path]');
+    if (!item) return;
+    e.preventDefault();
     if (item.dataset.kind === 'file') {
-      setCurrentFile(item.dataset.path); const action = prompt(`Action for ${item.dataset.path}: rename or delete`, 'rename');
-      if (action === 'rename') renameActiveFile(); else if (action === 'delete') deleteActiveFile();
+      const path = item.dataset.path;
+      setCurrentFile(path);
+      openMenu({
+        anchor: item, x: e.clientX, y: e.clientY, title: `${path} actions`,
+        items: [
+          { icon: '◈', label: 'Open file', onSelect: () => setCurrentFile(path) },
+          { icon: '✎', label: 'Rename…', onSelect: () => renameActiveFile(path) },
+          { icon: '⧉', label: 'Duplicate…', onSelect: () => duplicateActiveFile(path) },
+          { icon: '⇩', label: 'Download', onSelect: () => downloadCurrentFile(path) },
+          { icon: '⧉', label: 'Copy path', onSelect: () => copyText(path) },
+          { separator: true },
+          { icon: '✕', label: 'Delete…', danger: true, onSelect: () => deleteActiveFile(path) },
+        ],
+      });
       return;
     }
-    const folder = item.dataset.path; const action = prompt(`Folder ${folder}: rename or delete`, 'rename');
-    if (action === 'rename') {
-      const requested = prompt('New folder path:', folder); if (!requested || requested === folder) return;
-      try {
-        const destination = normalizePath(requested);
-        if (destination === folder || destination.startsWith(`${folder}/`)) throw new Error('A folder cannot be moved inside itself.');
-        const moves = Object.keys(project.files).filter((p) => p.startsWith(`${folder}/`));
-        for (const path of moves) { const next = normalizePath(`${destination}/${path.slice(folder.length + 1)}`); if (project.files[next] !== undefined) throw new Error(`A file already exists at ${next}.`); }
-        const nextFiles = { ...project.files };
-        for (const path of moves) { const next = `${destination}/${path.slice(folder.length + 1)}`; nextFiles[next] = project.files[path]; delete nextFiles[path]; }
-        project.files = nextFiles;
-        project.folders = project.folders.map((p) => p === folder ? destination : p.startsWith(`${folder}/`) ? `${destination}/${p.slice(folder.length + 1)}` : p);
-        if (!project.folders.includes(destination)) project.folders.push(destination);
-        if (project.activeFile && !project.files[project.activeFile]) project.activeFile = moves.length ? `${destination}/${moves[0].slice(folder.length + 1)}` : currentFile();
-        renderTree(); setCurrentFile(project.activeFile); saveLocal(true); toast(`Renamed folder to ${destination}`, 'success');
-      } catch (error) { toast(error.message, 'error'); }
-    } else if (action === 'delete') {
-      if (!confirm(`Delete folder "${folder}" and all of its files from this project?`)) return;
-      const remove = Object.keys(project.files).filter((p) => p.startsWith(`${folder}/`)); remove.forEach((p) => delete project.files[p]);
-      project.folders = project.folders.filter((p) => p !== folder && !p.startsWith(`${folder}/`));
-      if (!Object.keys(project.files).length) project.files['main.orv'] = `app "Orvexa App"\n`;
-      if (!project.files[project.activeFile]) project.activeFile = Object.keys(project.files)[0];
-      renderTree(); setCurrentFile(project.activeFile); saveLocal(true); toast(`Deleted folder ${folder}`, 'success');
-    }
+    const folder = item.dataset.path;
+    openMenu({
+      anchor: item, x: e.clientX, y: e.clientY, title: `${folder} actions`,
+      items: [
+        { icon: '＋', label: 'New file here…', onSelect: () => addNewFile(`${folder}/new-file.orv`) },
+        { icon: '✎', label: 'Rename folder…', onSelect: () => renameFolder(folder) },
+        { icon: '⧉', label: 'Copy folder path', onSelect: () => copyText(folder) },
+        { separator: true },
+        { icon: '✕', label: 'Delete folder…', danger: true, onSelect: () => deleteFolder(folder) },
+      ],
+    });
   });
-  $('#previewMenuButton').addEventListener('click', () => { const action = prompt('Preview action: website, scene, game, or docs', currentRightTab); if (['preview', 'scene', 'game', 'docs'].includes(action)) activateRightTab(action); });
+  $('#previewMenuButton').addEventListener('click', (event) => {
+    const items = [
+      ['home', '🏠', 'Home'], ['preview', '◉', 'Website'], ['scene', '◇', 'Scene'], ['game', '✦', 'World'],
+      ['launchpad', '🚀', 'Quick Create'], ['ai', '🤖', 'AI Agent'], ['docs', '▤', 'Docs'],
+    ].map(([tab, icon, label]) => ({ icon: currentRightTab === tab ? '●' : icon, label, onSelect: () => activateRightTab(tab) }));
+    items.push({ separator: true }, { icon: '⚙', label: 'Settings…', onSelect: openSettings });
+    openMenu({ anchor: event.currentTarget, title: 'Preview tabs', items });
+  });
   $('#playWorldButton').addEventListener('click', () => activateRightTab('game'));
   document.querySelectorAll('.experience-switch-button').forEach(b => b.addEventListener('click', () => applyExperienceMode(b.dataset.experienceMode)));
   applyExperienceMode(experienceMode, false);
   $('#quickCreateTopButton')?.addEventListener('click', () => activateRightTab('launchpad'));
   $('#aiAgentTopButton')?.addEventListener('click', () => activateRightTab('ai'));
   $('#autoFixTopButton')?.addEventListener('click', () => { activateRightTab('ai'); setTimeout(() => $('#autoFixWithAiButton')?.click(), 60); });
-  $('#themeButton').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'));
+  $('#themeButton').addEventListener('click', () => setTheme(resolveTheme(preferences) === 'light' ? 'dark' : 'light'));
+  $('#commandButton')?.addEventListener('click', () => openCommandPalette());
+  $('#settingsButton')?.addEventListener('click', openSettings);
+  $('#helpButton')?.addEventListener('click', openShortcutsHelp);
+  $('#projectHealthButton')?.addEventListener('click', openProjectHealthDialog);
+  $('#quickOpenButton')?.addEventListener('click', () => openCommandPalette({ mode: 'files' }));
+  $('#projectSearchButton')?.addEventListener('click', openProjectSearch);
+  $('#errorReloadButton')?.addEventListener('click', () => location.reload());
+  $('#errorDismissButton')?.addEventListener('click', () => { const banner = $('#appErrorBanner'); if (banner) banner.hidden = true; });
   $('#editorMenuButton').setAttribute('aria-label', 'Editor options');
   $('#previewContent').addEventListener('click', (e) => { const jump = e.target.closest('[data-line]'); if (jump) jumpTo(Number(jump.dataset.line), Number(jump.dataset.column)); });
   $('#consoleContent').addEventListener('click', (e) => { const jump = e.target.closest('[data-line]'); if (jump) jumpTo(Number(jump.dataset.line), Number(jump.dataset.column)); });
   $('#editorWorkspace').addEventListener('dragover', (e) => { e.preventDefault(); $('#editorWorkspace').classList.add('dragging'); });
   $('#editorWorkspace').addEventListener('dragleave', () => $('#editorWorkspace').classList.remove('dragging'));
   $('#editorWorkspace').addEventListener('drop', async (e) => { e.preventDefault(); $('#editorWorkspace').classList.remove('dragging'); const file = e.dataTransfer.files?.[0]; if (file) await onImportFile(file); });
-  document.addEventListener('keydown', (e) => { const tag=String(document.activeElement?.tagName||'').toUpperCase(),editing=['INPUT','TEXTAREA','SELECT'].includes(tag)||document.activeElement?.isContentEditable; if (currentRightTab==='scene'&&!editing&&!e.ctrlKey&&!e.metaKey&&transformModeState&&handleTransformModeKey(e)) return; if (currentRightTab==='scene'&&!editing&&!e.ctrlKey&&!e.metaKey&&['g','r','s'].includes(e.key.toLowerCase())) { e.preventDefault(); beginTransformMode(({g:'move',r:'rotate',s:'scale'})[e.key.toLowerCase()]); return; } if ((e.ctrlKey||e.metaKey)&&currentRightTab==='scene'&&!editing&&e.key.toLowerCase()==='z') { e.preventDefault(); transformModeState=null; applySceneHistory(lastResult?.scenes?.[currentSceneIndex],e.shiftKey?'redo':'undo'); return; } if ((e.ctrlKey||e.metaKey)&&currentRightTab==='scene'&&!editing&&e.key.toLowerCase()==='y') { e.preventDefault(); applySceneHistory(lastResult?.scenes?.[currentSceneIndex],'redo'); return; } if (currentRightTab==='scene'&&!editing&&!e.ctrlKey&&!e.metaKey&&e.key.toLowerCase()==='f') { e.preventDefault(); focusSceneCamera(lastResult?.scenes?.[currentSceneIndex],'selected'); } if ((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='p') { e.preventDefault(); openCommandPalette(); } if (e.key === 'Escape' && activeFind) closeFind(); if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && currentRightTab === 'docs') { e.preventDefault(); $('#docsSearchInput')?.focus(); } });
+  $('#editorTabs').addEventListener('click', (event) => {
+    const close = event.target.closest('[data-tab-close]');
+    if (close) { event.preventDefault(); event.stopPropagation(); closeEditorTab(close.dataset.tabClose); return; }
+    const tab = event.target.closest('[data-editor-tab]');
+    if (tab) setCurrentFile(tab.dataset.editorTab, { openInTabs: false });
+  });
+  $('#editorTabs').addEventListener('keydown', (event) => {
+    const tab = event.target.closest('[data-editor-tab]');
+    if (!tab) return;
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setCurrentFile(tab.dataset.editorTab, { openInTabs: false }); }
+    else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); closeEditorTab(tab.dataset.editorTab); }
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); const next = cycleTab(editorTabState, event.key === 'ArrowRight' ? 1 : -1); editorTabState = next; if (next.active) { setCurrentFile(next.active, { openInTabs: false }); $('#editorTabs').querySelector(`[data-editor-tab="${CSS.escape(next.active)}"]`)?.focus(); } }
+  });
+  $('#editorTabs').addEventListener('auxclick', (event) => { if (event.button !== 1) return; const tab = event.target.closest('[data-editor-tab]'); if (tab) { event.preventDefault(); closeEditorTab(tab.dataset.editorTab); } });
+  document.addEventListener('dragover', (event) => { if ([...(event.dataTransfer?.types || [])].includes('Files')) event.preventDefault(); });
+  document.addEventListener('drop', async (event) => {
+    if (event.target.closest?.('#editorWorkspace')) return;
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+    event.preventDefault();
+    if (/\.(orv|orvproj|zip|json|realm)$/i.test(file.name)) await onImportFile(file);
+    else toast('Drop a .orv, .realm, .zip or project JSON file to import it.', 'warning');
+  });
+  registerAppShortcuts();
+  document.addEventListener('keydown', (event) => {
+    const tag = String(document.activeElement?.tagName || '').toUpperCase();
+    const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || Boolean(document.activeElement?.isContentEditable);
+    const modalOpen = Boolean(document.querySelector('[data-orvexa-modal="true"]'));
+    const handled = shortcutRegistry.dispatch(event, { editable: editing, isMac: platformIsMac, modalOpen, currentRightTab });
+    if (handled) return;
+    if (modalOpen) return;
+    if (currentRightTab === 'scene' && !editing && !event.ctrlKey && !event.metaKey && transformModeState && handleTransformModeKey(event)) return;
+    if (currentRightTab === 'scene' && !editing && !event.ctrlKey && !event.metaKey && ['g', 'r', 's'].includes(event.key.toLowerCase())) { event.preventDefault(); beginTransformMode(({ g: 'move', r: 'rotate', s: 'scale' })[event.key.toLowerCase()]); return; }
+    if ((event.ctrlKey || event.metaKey) && currentRightTab === 'scene' && !editing && event.key.toLowerCase() === 'z') { event.preventDefault(); transformModeState = null; applySceneHistory(lastResult?.scenes?.[currentSceneIndex], event.shiftKey ? 'redo' : 'undo'); return; }
+    if ((event.ctrlKey || event.metaKey) && currentRightTab === 'scene' && !editing && event.key.toLowerCase() === 'y') { event.preventDefault(); applySceneHistory(lastResult?.scenes?.[currentSceneIndex], 'redo'); return; }
+    if (currentRightTab === 'scene' && !editing && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'f') { event.preventDefault(); focusSceneCamera(lastResult?.scenes?.[currentSceneIndex], 'selected'); return; }
+    if (event.key === 'Escape' && activeFind) closeFind();
+    if (event.key === '/' && !editing && currentRightTab === 'docs') { event.preventDefault(); $('#docsSearchInput')?.focus(); }
+  });
 }
 
-renderShell();
-renderTree();
-bindEvents();
-try { if (!localStorage.getItem('orvexa-tour-done')) setTimeout(() => { if (experienceMode === 'beginner') startTour(); }, 900); } catch {}
-setTheme(localStorage.getItem('orvexa-studio-theme') || 'dark');
-$('#editorHint').hidden = true;
-$('#globalState').textContent = 'Ready';
-saveLocal();
-renderPreview(null);
-renderDocsTab();
-// A failed or incomplete project load must never run uploaded code automatically.
-window.addEventListener('beforeunload', () => { worldGameCleanup?.(); if (project?.files) { project.files[currentFile()] = $('#codeEditor')?.value ?? project.files[currentFile()]; saveProject(project); } });
+function readSafeMode() {
+  try { return localStorage.getItem('orvexa-safe-mode') === '1'; } catch { return false; }
+}
+function enterSafeMode() {
+  try { localStorage.setItem('orvexa-safe-mode', '1'); } catch { /* ignore */ }
+  toast('Safe mode on. Reloading without live previews…', 'warning');
+  setTimeout(() => location.reload(), 600);
+}
+function leaveSafeMode() {
+  try { localStorage.removeItem('orvexa-safe-mode'); } catch { /* ignore */ }
+  activateRightTab('preview');
+  toast('Safe mode off. Preview engines are enabled again.', 'success');
+}
+function bootStudio() {
+  installGlobalErrorHandlers({
+    windowRef: window,
+    storage: sessionStore,
+    onError: (entry, error) => showAppError(entry, error),
+  });
+  applyPreferences(preferences);
+  renderShell();
+  renderTree();
+  renderEditorTabs();
+  bindEvents();
+  applyEditorPreferences();
+  updateThemeButton();
+  updateNetworkBadge();
+  try {
+    if (!localStorage.getItem('orvexa-tour-done') && preferences.showWelcomeTour) setTimeout(() => { if (experienceMode === 'beginner') startTour(); }, 1100);
+  } catch { /* private mode */ }
+  const editorHint = $('#editorHint');
+  if (editorHint) editorHint.hidden = true;
+  const globalState = $('#globalState');
+  if (globalState) globalState.textContent = 'Ready';
+  saveLocal();
+  const safeMode = readSafeMode();
+  if (safeMode) {
+    toast('Safe mode is on — live preview and the tour are paused. Run a file or choose “Leave safe mode” when ready.', 'warning');
+    renderDocsTab();
+  } else {
+    renderPreview(null);
+    renderDocsTab();
+  }
+  refreshStorageEstimate();
+  setupPwa();
+  appBooted = true;
+  announce('Orvexa Studio ready. Press Control K for the command palette or F1 for shortcuts.');
+}
+
+try {
+  bootStudio();
+} catch (error) {
+  const described = describeError(error, { context: 'boot' });
+  recordError(error, { storage: sessionStore, meta: { source: 'boot' } });
+  try {
+    const root = document.getElementById('app') || document.body;
+    root.innerHTML = buildBootFallbackHtml(error, { version: APP_VERSION });
+    bindBootFallback(root, { project, storage: localStorage });
+    console.error('Orvexa boot failed:', described.technical);
+  } catch (fallbackError) {
+    document.body.textContent = `Orvexa Studio could not start: ${error?.message || error}`;
+    console.error(fallbackError);
+  }
+}
+
+function saveSessionRecovery() {
+  try {
+    const files = { ...project.files };
+    if ($('#codeEditor') && files[currentFile()] !== undefined) files[currentFile()] = $('#codeEditor').value;
+    sessionStore.setJSON('session-recovery', { savedAt: new Date().toISOString(), name: project.name, activeFile: project.activeFile, files });
+  } catch { /* session storage is optional */ }
+}
+window.addEventListener('pagehide', saveSessionRecovery);

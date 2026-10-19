@@ -1,0 +1,28 @@
+{
+  "id": "./",
+  "name": "Orvexa Studio",
+  "short_name": "Orvexa",
+  "description": "A local-first creative studio for 3D scenes, games, websites and apps. 24 games, 18 web templates, offline AI agent and an installable editor.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#101016",
+  "theme_color": "#101016",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["graphics", "productivity", "entertainment", "developer"],
+  "icons": [
+    { "src": "./icons/orvexa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/orvexa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/orvexa-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "./orvexa-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Open Studio", "short_name": "Studio", "url": "./?tab=home", "icons": [{ "src": "./icons/orvexa-192.png", "sizes": "192x192" }] },
+    { "name": "Play Aetherfall", "short_name": "Aetherfall", "url": "./play.html", "icons": [{ "src": "./icons/orvexa-192.png", "sizes": "192x192" }] },
+    { "name": "Open Modeler", "short_name": "Modeler", "url": "./modeler.html", "icons": [{ "src": "./icons/orvexa-192.png", "sizes": "192x192" }] }
+  ],
+  "prefer_related_applications": false
+}

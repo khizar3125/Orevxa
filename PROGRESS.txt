@@ -1,0 +1,76 @@
+ORVEXA STUDIO v10 — CONTINUOUS PROGRESS / RESUME FILE
+=====================================================
+(Plain text on purpose: PLAN.md is the only .md file allowed by tests.)
+
+HOW TO RESUME
+-------------
+Say "CONTINUE". Read this file and PLAN.md PART B, then run:
+  npm install        (node_modules is not committed)
+  npm run check      lint + tests + production build + live verification
+Continue from "REMAINING" below. Update this file after every phase.
+
+CURRENT STATUS
+--------------
+Phase: V10 COMPLETE — release candidate verified (V10-1 … V10-9)
+Version: 10.0.0
+Branch: arena/5a01eb14-orevxa
+Baseline commit: 13bb1b3 (v9 + extracted archive, before upgrade)
+Release commit: see `git log --oneline -1` (v10 upgrade commit)
+
+VERIFIED RESULTS (last full run)
+--------------------------------
+npm run lint      PASS   66 files checked, 2 heuristic warnings
+npm test          PASS   237/237 tests (28 baseline files + boot + imports)
+npm run build     PASS   30 files, ~1.33 MB raw / ~455 kB gzipped
+                         Studio first load ~265 kB gzipped (budget 320 kB)
+npm run verify    PASS   78/78 static + live HTTP checks
+npm run package   PASS   release/orvexa-studio-10.0.0.zip + .sha256,
+                         re-read from disk and CRC-verified
+
+WHAT SHIPPED
+------------
+[x] 0. Safety checkpoint commit before changes
+[x] 1. Repo hygiene: README + nested ZIP removed, versions unified at 10.0.0
+[x] 2. Core modules: storage, preferences, shortcuts, search, a11y, errors,
+       pwa, editorTabs, health, projectSearch (unused events.js deleted)
+[x] 3. UI primitives: dialog, menu, palette 2.0, settings, health, shortcuts;
+       native prompt/confirm removed from Studio; Modeler uses inline rename
+       and a non-blocking modifier note instead of native dialogs
+[x] 4. Multi-file editor tabs, dirty state, project-wide search with replace
+[x] 5. Design system: tokens, accent, density, font, motion, contrast,
+       responsive layouts, focus handling, skip link
+[x] 6. Production build: esbuild bundle/split/minify/hash/SRI, lazy World +
+       path tracer + exporters, gzip/ETag/HEAD server, 78-check verifier,
+       release ZIP packager, GitHub Actions CI, Netlify headers/redirects
+[x] 7. Reliability/privacy: global error boundary + recovery screen + safe
+       mode, quota-aware saves, session-only AI keys with opt-in remember,
+       CSP on all three pages, snapshots before destructive replacement
+[x] 8. Docs, 8-step tour (palette/settings/health included), this file
+[x] 9. Final gate green (see verified results above)
+[ ] 10. Final commit + push (run the two commands below)
+
+EXACT NEXT COMMANDS
+-------------------
+cd /home/user/Orevxa
+git add -A
+git commit -m "v10: production upgrade — build pipeline, PWA, a11y, verification"
+git push origin arena/5a01eb14-orevxa
+npm run release     # optional: rebuild + verify + regenerate the ZIP
+
+REMAINING / OPTIONAL (not blocking release)
+-------------------------------------------
+- Browser-only manual QA on real Chrome/Safari/iOS (no browser binary in this
+  environment): WebGL scenes, path tracer, touch gestures, install prompt.
+- True interruptible Stop requires moving interpreter execution into a Worker.
+- Modeler route keeps its own compact token set (ui.css is not loaded there);
+  converting its remaining dialogs would need a shared token layer.
+- Source maps are opt-in: `npm run build -- --sourcemap`.
+
+KNOWN LIMITATIONS (do not “fix” with fake UI)
+---------------------------------------------
+- Interpreter is synchronous on the main thread. Real Stop needs a Worker
+  rewrite; the disabled Stop button was removed instead of faked.
+- Browser-stored hosted AI keys are never fully secret; default is session-only
+  with explicit remember opt-in and a documented server-proxy recommendation.
+- APK compilation stays a GitHub Actions workflow, not an in-browser build.
+- WebGL renderer and CPU path tracer are lightweight, not Unreal/Blender.

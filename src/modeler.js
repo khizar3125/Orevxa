@@ -1,7 +1,7 @@
-import { createMeshGeometry, projectScenePoint, startWebGLScene } from './studio/scene3d.js';
+import { createMeshGeometry, exportOBJ, parseOBJ, projectScenePoint, startWebGLScene } from './studio/scene3d.js';
 import { createProceduralTerrainGeometry, mirrorTriangleMesh, optimizeTriangleMesh, subdivideTriangleMesh } from './studio/engine.js';
 import { bakeTriangleMeshTransform, createBasicRig, generatePlanarUVs, inspectUVLayout, joinTriangleMeshes, sculptTriangleMesh, solveRigIK, unwrapMeshUVIslands, validateUVs } from './studio/modeling.js';
-import { exportFBX, exportGLB, exportOBJ, importFBX, importGLTF, parseOBJ } from './studio/assetFormats.js';
+import { exportFBX, exportGLB, importFBX, importGLTF } from './studio/assetFormats.js';
 import { evaluateModifierStack, MODIFIER_TYPES, normalizeModifier, smoothTriangleMesh } from './studio/modifiers.js';
 import { booleanTriangleMeshes, coplanarTriangleRegion, deleteSelectedFaces, extrudeTriangleFaces, fillMeshHoles, flipMeshNormals, fractureTriangleMesh, insetTriangleFaces, inspectMeshTopology, loopCutTriangleMesh, meshEdgeKey, meshVertexKey, pokeSelectedFaces, recalculateMeshNormals, splitSelectedEdges, translateMeshElements, weldMeshVertices, subdivideCatmullClark, latheProfileDetailed, geodesicSphereDetailed, fractureMeshVoronoi3D, bridgeVertexLoops } from './studio/meshEdit.js';
 import { createWorldAssetPackage, WORLD_ASSETS_STORAGE_KEY } from './studio/worldAssets.js';
@@ -874,7 +874,16 @@ function setMode(mode) {
   if (mode === 'sculpt') {
     const obj = selectedObject();
     if (!obj || obj.type !== 'mesh') { showToast('Select a mesh before entering Sculpt mode.', 'warning'); return; }
-    if (obj.modifiers?.length) { const answer = confirm('Sculpting edits the base mesh. Apply the current modifier stack before sculpting?'); if (!answer) return; rememberHistory(); obj.baseGeometry = [...obj.geometry]; obj.modifiers = []; obj.uvs = null; evaluateObject(obj); }
+    if (obj.modifiers?.length) {
+      // Non-blocking: sculpting always works on the evaluated base mesh. The
+      // stack is applied with an undo entry, and the toast says how to revert.
+      rememberHistory();
+      obj.baseGeometry = [...obj.geometry];
+      obj.modifiers = [];
+      obj.uvs = null;
+      evaluateObject(obj);
+      showToast('Modifier stack applied before sculpting — Undo restores it.', 'info');
+    }
   }
   activeMode = mode;
   for (const b of $$('[data-mode]')) { b.classList.toggle('active', b.dataset.mode === mode); b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); }
@@ -1026,7 +1035,39 @@ function bindEvents() {
   $$('[data-add-primitive]').forEach(button => button.addEventListener('click', () => addPrimitive(button.dataset.addPrimitive)));
   $('#addTerrainButton').addEventListener('click', addTerrain); $('#magicModelButton').addEventListener('click', addMagicModel); $('#addLightButton').addEventListener('click', addLight); $('#duplicateButton').addEventListener('click', duplicateSelected); $('#deleteButton').addEventListener('click', deleteSelected); $('#joinButton').addEventListener('click', joinSelected);
   $('#outliner').addEventListener('click', event => { const vis = event.target.closest('[data-visibility]'); if (vis) { event.stopPropagation(); const obj = getObject(vis.dataset.visibility); if (obj) { obj.visible = obj.visible === false; renderOutliner(); triggerRender(); scheduleLocalSave(); } return; } const row = event.target.closest('[data-id]'); if (row) { selectObject(row.dataset.id, { shift: event.shiftKey }); } });
-  $('#outliner').addEventListener('dblclick', event => { const row=event.target.closest('[data-id]'); if(!row)return; const obj=getObject(row.dataset.id); const requested=prompt('Rename object:',obj?.name||''); if(requested?.trim()&&obj){rememberHistory();obj.name=requested.trim().slice(0,100);refreshScene();} });
+  $('#outliner').addEventListener('dblclick', event => {
+    const row = event.target.closest('[data-id]');
+    if (!row) return;
+    const obj = getObject(row.dataset.id);
+    const label = row.querySelector('.object-label');
+    if (!obj || !label || row.querySelector('.outliner-rename')) return;
+    const input = document.createElement('input');
+    input.className = 'outliner-rename';
+    input.value = obj.name || 'Object';
+    input.maxLength = 100;
+    input.setAttribute('aria-label', 'Object name');
+    label.replaceWith(input);
+    input.focus();
+    input.select();
+    let settled = false;
+    const finish = (save) => {
+      if (settled) return;
+      settled = true;
+      const value = input.value.trim();
+      if (save && value && value !== obj.name) {
+        rememberHistory();
+        obj.name = value.slice(0, 100);
+        scheduleLocalSave();
+      }
+      refreshScene();
+    };
+    input.addEventListener('keydown', (keyEvent) => {
+      keyEvent.stopPropagation();
+      if (keyEvent.key === 'Enter') { keyEvent.preventDefault(); finish(true); }
+      else if (keyEvent.key === 'Escape') { keyEvent.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+  });
   $('#outlinerSearch').addEventListener('input', renderOutliner); $('#expandOutlinerButton').addEventListener('click', () => { $('#outlinerSearch').value='';renderOutliner(); });
   $$('[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
   $('#elementSelectionMode').addEventListener('change', () => { editSelectionMode = ['vertex','edge','face'].includes($('#elementSelectionMode').value) ? $('#elementSelectionMode').value : 'face'; clearEditSelection(); renderWireframe(); renderStats(); });

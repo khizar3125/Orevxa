@@ -55,6 +55,11 @@ export function deleteProjectSnapshot(snapshotId, storage) {
   return listProjectSnapshots(storage);
 }
 
+export function clearProjectSnapshots(storage) {
+  writeAll(storage, []);
+  return [];
+}
+
 /** Generate a pretty share-card SVG for a project (downloadable in Studio). */
 export function buildShareCardSvg({ title = 'My Orvexa Creation', kind = 'game', lines = 0, accent = '#7c5cff' } = {}) {
   const esc = (s) => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');

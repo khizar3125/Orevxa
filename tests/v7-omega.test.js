@@ -235,7 +235,7 @@ test('Studio v7 UI: topbar switcher, Launchpad 2.0, Scene Workbench and AI criti
 test('Modeler v7: rails, inspector AI tab, Omega surgery and unique id contract', () => {
   const html = read('modeler.html');
   const js = read('src/modeler.js');
-  for (const needle of ['modelerPrefabRail', 'modelerMoodRail', 'modelerLatheRailButton', 'modelerGeodesicRailButton', 'modelerTerrainRailButton', 'data-inspector-tab="ai"', 'modelerAiPrompt', 'modelerAiGenerateButton', 'modelerAiCritiqueButton', 'modelerSequencePreview', 'catmullClarkButton', 'geodesicSphereButton', 'latheVaseButton', 'bridgeLoopsButton', 'fracture3dButton', 'naniteDagStatsButton', 'topologyDoctorButton', 'materialGraphSvgPreview', 'geoNodeSvgPreview', 'value="cyber-carbon-fiber"', 'value="spiral-staircase"', 'v7.0 · Omega Modeler']) assert.ok(html.includes(needle), needle);
+  for (const needle of ['modelerPrefabRail', 'modelerMoodRail', 'modelerLatheRailButton', 'modelerGeodesicRailButton', 'modelerTerrainRailButton', 'data-inspector-tab="ai"', 'modelerAiPrompt', 'modelerAiGenerateButton', 'modelerAiCritiqueButton', 'modelerSequencePreview', 'catmullClarkButton', 'geodesicSphereButton', 'latheVaseButton', 'bridgeLoopsButton', 'fracture3dButton', 'naniteDagStatsButton', 'topologyDoctorButton', 'materialGraphSvgPreview', 'geoNodeSvgPreview', 'value="cyber-carbon-fiber"', 'value="spiral-staircase"', 'v10.0 · Omega Modeler']) assert.ok(html.includes(needle), needle);
   const referenced = [...js.matchAll(/\$\('#([A-Za-z0-9_-]+)'\)/g)].map(m => m[1]);
   const htmlIds = [...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]);
   assert.equal(new Set(htmlIds).size, htmlIds.length, 'duplicate ids in modeler.html');

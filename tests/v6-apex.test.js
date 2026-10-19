@@ -157,23 +157,30 @@ test('Aetherfall v6 controls keep exactly two windDeform definitions', () => {
 
 test('UI wiring: Launchpad, AI Agent, modeler Apex and clean server headers', () => {
   const main = read('src/main.js');
-  for (const needle of ['class="experience-switcher"', 'data-experience-mode="beginner"', 'data-experience-mode="creator"', 'data-experience-mode="pro"', 'id="autoFixTopButton"', 'id="quickCreateTopButton"', 'id="aiAgentTopButton"', "data-right-tab=\"launchpad\"", "data-right-tab=\"ai\"", '⚡ <span>Quick Create</span>', '🤖 <span>AI Agent</span>', '🛠️ <span>Auto-Fix AI</span>', 'ORVEXA STUDIO v7.0', "data-spawn-prefab", "data-atmosphere-mood", "data-insert-ui-block", 'id="aiWizardGoal"', 'id="aiWizardStyle"', 'id="aiAgentPrompt"', 'id="aiAgentRunButton"', 'id="autoFixWithAiButton"']) assert.ok(main.includes(needle), needle);
+  for (const needle of ['class="experience-switcher"', 'data-experience-mode="beginner"', 'data-experience-mode="creator"', 'data-experience-mode="pro"', 'id="autoFixTopButton"', 'id="quickCreateTopButton"', 'id="aiAgentTopButton"', "data-right-tab=\"launchpad\"", "data-right-tab=\"ai\"", '⚡ <span>Quick Create</span>', '🤖 <span>AI Agent</span>', '🛠️ <span>Auto-Fix AI</span>', 'ORVEXA STUDIO v10.0', "data-spawn-prefab", "data-atmosphere-mood", "data-insert-ui-block", 'id="aiWizardGoal"', 'id="aiWizardStyle"', 'id="aiAgentPrompt"', 'id="aiAgentRunButton"', 'id="autoFixWithAiButton"']) assert.ok(main.includes(needle), needle);
   const modelerJs = read('src/modeler.js'); const modelerHtml = read('modeler.html');
   const referenced = [...modelerJs.matchAll(/\$\('#([A-Za-z0-9]+)'\)/g)].map(m => m[1]);
   const htmlIds = [...modelerHtml.matchAll(/ id="([^"]+)"/g)].map(m => m[1]);
   assert.equal(new Set(htmlIds).size, htmlIds.length, 'modeler.html ids must be unique');
   for (const id of referenced) assert.ok(htmlIds.includes(id), `modeler #${id} missing in modeler.html`);
-  for (const needle of ['loopCutButton', 'pokeFacesButton', 'fillHolesButton', 'naniteDecimateButton', 'booleanMeshButton', 'fractureMeshButton', 'spawnVfxButton', 'solveIkButton', 'toneMappingSelect', 'value="crease"', 'value="pinch"', 'value="alpine-ice"', 'value="simpleDeform"', 'value="portal-vortex"', 'value="snowfall"', 'v7.0 · Omega Modeler']) assert.ok(modelerHtml.includes(needle), needle);
+  for (const needle of ['loopCutButton', 'pokeFacesButton', 'fillHolesButton', 'naniteDecimateButton', 'booleanMeshButton', 'fractureMeshButton', 'spawnVfxButton', 'solveIkButton', 'toneMappingSelect', 'value="crease"', 'value="pinch"', 'value="alpine-ice"', 'value="simpleDeform"', 'value="portal-vortex"', 'value="snowfall"', 'v10.0 · Omega Modeler']) assert.ok(modelerHtml.includes(needle), needle);
   const serve = read('scripts/serve.mjs');
-  assert.ok(!serve.includes('Referrer-Policy')); assert.ok(!serve.includes('Content-Security-Policy'));
+  assert.ok(serve.includes('X-Content-Type-Options'), 'dev/preview server must set nosniff');
+  assert.ok(!serve.includes("'unsafe-eval'"), 'no eval-friendly CSP in the server');
+  for (const page of ['index.html', 'play.html', 'modeler.html']) {
+    const html = read(page);
+    assert.match(html, /http-equiv="Content-Security-Policy"/, `${page} needs a CSP meta tag`);
+    assert.match(html, /default-src 'self'/, `${page} CSP must default to self`);
+    assert.ok(!html.includes("'unsafe-eval'"), `${page} CSP must not allow eval`);
+  }
 });
 
-test('PLAN.md is the only markdown file and package is v9.0.0', () => {
+test('PLAN.md is the only markdown file and package is v10.0.0', () => {
   const found = [];
   const walk = (dir) => { for (const entry of readdirSync(dir, { withFileTypes: true })) { if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'dist') continue; const full = path.join(dir, entry.name); if (entry.isDirectory()) walk(full); else if (entry.name.toLowerCase().endsWith('.md')) found.push(path.relative(root, full)); } };
   walk(root);
   assert.deepEqual(found, ['PLAN.md']);
   assert.equal(existsSync(path.join(root, 'docs')), false);
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '9.0.0');
+  assert.equal(pkg.version, '10.0.0');
 });

@@ -1,14 +1,27 @@
 {
   "name": "orvexa-studio",
-  "version": "9.0.0",
+  "version": "10.0.0",
   "private": true,
   "type": "module",
-  "description": "Orvexa Studio v9.0.0 \u2014 Har Din Naya Kamaal: 24 games / 18 web templates, Creator Quests with XP levels and 10 achievement badges, Magic buttons (Surprise Me, Magic Scene, Magic Model, 3 AI Versions), Guardian Blessings in Aetherfall, extra Omega Engine presets (8 sequencer clips, 8 terrains, 18 materials), on the v8 Sabke Liye Creator base.",
+  "description": "Orvexa Studio v10.0.0 — production-grade local-first creative studio: Orvexa language, WebGL scenes, mesh Modeler, 24 games, 18 web templates, 24 UI blocks, offline AI agent, PWA, accessibility, and a verified static build.",
   "scripts": {
     "dev": "node scripts/serve.mjs --dev",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/serve.mjs --preview",
+    "lint": "node scripts/lint.mjs",
     "test": "node --test",
-    "check": "npm test && npm run build"
+    "test:watch": "node --test --watch",
+    "smoke": "node scripts/verify.mjs",
+    "verify": "node scripts/verify.mjs",
+    "package": "node scripts/package.mjs",
+    "check": "npm run lint && npm test && npm run build && npm run verify",
+    "release": "npm run check && npm run package"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.1.3"
   }
 }

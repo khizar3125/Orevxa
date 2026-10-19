@@ -221,9 +221,9 @@ test('Aetherfall v8: daily challenge, photo mode and ambience packs with windDef
   assert.ok(read('src/studio/aetherfall-game.css').includes('.aether-daily'));
 });
 
-test('v8 package version and sole-markdown invariant', () => {
+test('v8 package version follows the current release and sole-markdown invariant', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '9.0.0');
+  assert.equal(pkg.version, '10.0.0');
   const plan = read('PLAN.md');
   assert.match(plan, /v8\.0/);
   assert.match(plan, /PART B/);

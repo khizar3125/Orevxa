@@ -111,9 +111,9 @@ test('v9 UI wiring in main.js + modeler magic + blessings anchors', () => {
   assert.equal((game.match(/vec3 windDeform\(vec3 p, vec3 color\)/g) || []).length, 2);
 });
 
-test('v9 package is 9.0.0 and PLAN.md stays the sole markdown file', () => {
+test('v9 package tracks the current v10 release and PLAN.md stays the sole markdown file', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(pkg.version, '9.0.0');
+  assert.equal(pkg.version, '10.0.0');
   const mds = readdirSync(new URL('..', import.meta.url)).filter(f => f.endsWith('.md'));
   assert.deepEqual(mds, ['PLAN.md']);
 });

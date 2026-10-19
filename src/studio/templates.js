@@ -1,5 +1,5 @@
 /**
- * Orvexa Studio v7.0 — Omega Templates: full production game blueprints,
+ * Orvexa Studio v10 — Omega Templates: full production game blueprints,
  * full-stack web/app templates, multi-part kitbash prefabs, photoreal moods,
  * no-code UI blocks and a comprehensive deterministic Auto-Fix engine.
  * Every blueprint source below is a complete, runnable Orvexa (.orv/.realm)

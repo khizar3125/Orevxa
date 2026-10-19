@@ -8,6 +8,8 @@
   --panel-soft: #1e1c29;
   --edge: #2b2937;
   --edge-strong: #3b374b;
+  --border: var(--edge);
+  --sans: var(--font);
   --text: #f1eff9;
   --text-soft: #c7c3d8;
   --muted: #858197;
@@ -629,7 +631,7 @@ kbd { display: inline-block; padding: 2px 5px; border: 1px solid var(--edge-stro
 .forge-map-row small { flex:0 0 58px; color:var(--muted); text-align:right; font-size:9px; }
 @media(max-width:420px) { .forge-map-row { flex-wrap:wrap; } .forge-map-row span { flex-basis:100%; } .forge-map-row small { flex:1; } }
 
-/* ===== Orvexa Studio v6.0: Quick Create + AI Agent ===== */
+/* ===== Orvexa Studio · Quick Create + AI Agent ===== */
 .experience-mode-label{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted,#9aa);font-weight:700}
 .experience-mode-label select{background:var(--panel2,#202033);color:var(--text,#eef);border:1px solid var(--line,#345);border-radius:8px;padding:6px 6px;font-weight:800}
 .launchpad-panel,.ai-agent-panel{padding:16px;overflow:auto;display:flex;flex-direction:column;gap:10px}
@@ -650,7 +652,7 @@ kbd { display: inline-block; padding: 2px 5px; border: 1px solid var(--edge-stro
 .ai-agent-output{white-space:pre-wrap;background:#0d1020;border:1px solid var(--line,#345);border-radius:10px;padding:11px;font-size:12px;line-height:1.5;min-height:70px}
 .inline-action{background:none;border:0;color:#48e5e5;font:inherit;font-weight:800;cursor:pointer;padding:0}
 
-/* ===== Orvexa Studio v7.0 · Omega UI ===== */
+/* ===== Orvexa Studio · Omega UI (v10 baseline) ===== */
 .experience-switcher { display: inline-flex; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(124, 92, 255, .12); border: 1px solid rgba(124, 92, 255, .35); backdrop-filter: blur(8px); }
 .experience-switch-button { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 999px; padding: 5px 11px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; opacity: .75; transition: all .18s ease; }
 .experience-switch-button:hover { opacity: 1; transform: translateY(-1px); }
@@ -689,7 +691,7 @@ body[data-experience-mode="pro"] .top-button { letter-spacing: .02em; }
 .ai-tool-button strong { font-size: 12px; }
 .ai-tool-button span { font-size: 11px; opacity: .7; text-transform: capitalize; }
 
-/* ===== Orvexa Studio v8.0 · Sabke Liye Creator ===== */
+/* ===== Orvexa Studio · Creator layer ===== */
 .home-panel h4 { margin: 18px 0 8px; }
 .home-hero { padding: 18px; border-radius: 18px; background: linear-gradient(150deg, rgba(124,92,255,.22), rgba(72,229,229,.1)); border: 1px solid rgba(124,92,255,.35); }
 .home-big-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 14px 0; }

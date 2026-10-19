@@ -133,12 +133,86 @@ export function normalizeAiConfig(input = {}) {
     offlineFallback: raw.offlineFallback !== false,
     fallbackProvider: 'free-local',
     requiresApiKey: provider.requiresApiKey,
+    rememberApiKey: raw.rememberApiKey === true,
   };
 }
 
 function storageOrNull(explicit) {
   if (explicit && typeof explicit.getItem === 'function') return explicit;
   try { return globalThis.localStorage || null; } catch { return null; }
+}
+
+export const AI_SESSION_KEY = 'orvexa-ai-key-session-v1';
+
+function storageOf(kind, explicit) {
+  if (explicit && typeof explicit.getItem === 'function') return explicit;
+  try { return (kind === 'session' ? globalThis.sessionStorage : globalThis.localStorage) || null; } catch { return null; }
+}
+
+/**
+ * Privacy-safe AI config: secrets live in sessionStorage by default and only in
+ * localStorage when the user explicitly opts in. Legacy keys previously stored
+ * in localStorage are migrated out on first load.
+ */
+export function loadAiConfigSecure({ storage = null, sessionStorage = null } = {}) {
+  const local = storageOf('local', storage);
+  const session = storageOf('session', sessionStorage);
+  const base = loadAiConfig(local);
+  let apiKey = String(base.apiKey || '');
+  let rememberApiKey = base.rememberApiKey === true;
+  if (apiKey) {
+    // Migrate legacy plaintext key out of persistent storage.
+    try { session?.setItem(AI_SESSION_KEY, apiKey); } catch { /* session may be blocked */ }
+    try { saveAiConfig({ ...base, apiKey: rememberApiKey ? apiKey : '' }, local); } catch { /* ignore */ }
+  } else {
+    try { apiKey = String(session?.getItem(AI_SESSION_KEY) || ''); } catch { apiKey = ''; }
+  }
+  return { ...base, apiKey, rememberApiKey, keySource: apiKey ? 'session' : 'none' };
+}
+
+export function saveAiConfigSecure(config, { storage = null, sessionStorage = null } = {}) {
+  const normalized = normalizeAiConfig(config);
+  const remember = config?.rememberApiKey === true;
+  const local = storageOf('local', storage);
+  const session = storageOf('session', sessionStorage);
+  try {
+    if (normalized.apiKey) session?.setItem(AI_SESSION_KEY, normalized.apiKey);
+    else session?.removeItem(AI_SESSION_KEY);
+  } catch { /* session storage may be blocked */ }
+  const persisted = { ...normalized, apiKey: remember ? normalized.apiKey : '', rememberApiKey: remember };
+  saveAiConfig(persisted, local);
+  return { ...normalized, apiKey: normalized.apiKey, rememberApiKey: remember, keySource: normalized.apiKey ? (remember ? 'local' : 'session') : 'none' };
+}
+
+export function forgetStoredAiKey({ storage = null, sessionStorage = null } = {}) {
+  const local = storageOf('local', storage);
+  const session = storageOf('session', sessionStorage);
+  try { session?.removeItem(AI_SESSION_KEY); } catch { /* ignore */ }
+  const base = loadAiConfig(local);
+  try { saveAiConfig({ ...base, apiKey: '', rememberApiKey: false }, local); } catch { /* ignore */ }
+  return true;
+}
+
+export function aiKeyStatus({ storage = null, sessionStorage = null } = {}) {
+  const local = storageOf('local', storage);
+  const session = storageOf('session', sessionStorage);
+  let remembered = false;
+  try { remembered = Boolean(loadAiConfig(local).apiKey); } catch { remembered = false; }
+  let sessionKey = '';
+  try { sessionKey = String(session?.getItem(AI_SESSION_KEY) || ''); } catch { sessionKey = ''; }
+  return { stored: remembered || Boolean(sessionKey), remembered, sessionOnly: Boolean(sessionKey) && !remembered };
+}
+
+/** Validate custom endpoints: HTTPS anywhere, HTTP only for localhost/LAN dev. */
+export function validateAiEndpoint(endpoint) {
+  const value = String(endpoint || '').trim();
+  if (!value) return { ok: true, endpoint: '' };
+  let url;
+  try { url = new URL(value); } catch { return { ok: false, error: 'Endpoint must be a valid URL.' }; }
+  const localHost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i.test(url.hostname);
+  if (url.protocol === 'https:') return { ok: true, endpoint: url.toString() };
+  if (url.protocol === 'http:' && localHost) return { ok: true, endpoint: url.toString() };
+  return { ok: false, error: 'Use HTTPS for remote endpoints. HTTP is allowed only for localhost/Ollama.' };
 }
 
 export function loadAiConfig(storage) {
