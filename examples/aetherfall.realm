@@ -1,0 +1,12 @@
+⟦ REALM: AETHERFALL ⟧
+☼ SKY: copper-dawn
+▧ LAND: highlands | span 280 | detail 160 | seed 7412
+⌖ ENTRY: 0, 0, 14
+✧ SCATTER: elderpine × 185 | radius 128 | seed 704
+✧ SCATTER: moonbloom × 42 | radius 92 | seed 991
+✧ SCATTER: sunshard × 18 | radius 108 | seed 802
+⌂ SETTLEMENT: windmere | at -48, 0, 18 | houses 8
+⌂ SETTLEMENT: stoneveil | at 62, 0, -18 | houses 6
+≋ WATERS: moonwater | at -32, -1.9, 34 | radius 25
+✦ BEACON: firstlight | at 18, 0, -64 | unlock 7
+⚙ RULES: explore, collect, sprint, jump, interact

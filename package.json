@@ -1,0 +1,14 @@
+{
+  "name": "orvexa-studio",
+  "version": "9.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Orvexa Studio v9.0.0 \u2014 Har Din Naya Kamaal: 24 games / 18 web templates, Creator Quests with XP levels and 10 achievement badges, Magic buttons (Surprise Me, Magic Scene, Magic Model, 3 AI Versions), Guardian Blessings in Aetherfall, extra Omega Engine presets (8 sequencer clips, 8 terrains, 18 materials), on the v8 Sabke Liye Creator base.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs --dev",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/serve.mjs --preview",
+    "test": "node --test",
+    "check": "npm test && npm run build"
+  }
+}

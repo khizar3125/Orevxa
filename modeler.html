@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0e16">
+  <meta name="description" content="Orvexa Modeler — mesh modeling, procedural modifiers, sculpting, UV authoring and PBR asset exchange.">
+  <title>Orvexa Modeler</title>
+  <link rel="stylesheet" href="./src/modeler.css">
+</head>
+<body>
+  <div id="modelerApp">
+    <header class="modeler-topbar">
+      <a class="brand" href="./index.html" title="Return to Orvexa Studio"><span class="brand-mark">O</span><span><strong>ORVEXA</strong><small>MODELER</small></span></a>
+      <div class="project-badge"><span class="live-dot"></span><input id="projectName" aria-label="Project name" value="Untitled Model" maxlength="90"><span id="saveState">Local workspace</span></div>
+      <div class="top-actions">
+        <button class="tool-button" id="openProjectButton">Open</button><input id="openProjectInput" type="file" accept=".orvmodel,.json,.obj,.glb,.gltf,.fbx" hidden>
+        <button class="tool-button" id="saveProjectButton">Save Project</button>
+        <button class="tool-button" id="undoButton" title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button class="tool-button" id="redoButton" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+        <a class="back-link" href="./index.html">Studio ↗</a>
+      </div>
+    </header>
+    <nav class="modeler-toolbar" aria-label="Modeling tools">
+      <div class="toolbar-group"><span class="toolbar-label">ADD MESH</span>
+        <button data-add-primitive="cube" title="Add cube">▦ Cube</button><button data-add-primitive="sphere" title="Add UV sphere">◉ Sphere</button><button data-add-primitive="cylinder">Cylinder</button><button data-add-primitive="cone">Cone</button><button data-add-primitive="torus">Torus</button><button data-add-primitive="plane">Plane</button>
+      </div>
+      <div class="toolbar-separator"></div>
+      <div class="toolbar-group"><button id="addTerrainButton">⛰ Terrain</button><button id="magicModelButton" title="Ek click me pura composed model — castle, rocket ya robot!">🪄 Magic Model</button><button id="addLightButton">☼ Light</button><button id="duplicateButton">⧉ Duplicate</button><button id="deleteButton" class="danger-quiet">Delete</button><button id="joinButton">Join Selected</button></div>
+      <div class="toolbar-spacer"></div>
+      <button id="importAssetToolbar" class="tool-button">Import Asset</button><button id="publishToWorldButton" class="tool-button accent" title="Publish selected meshes into the Aetherfall playable world">↗ Publish to Aetherfall</button>
+      <div class="toolbar-separator"></div>
+      <div class="toolbar-group streaming-tools" aria-label="World streaming settings">
+        <button id="worldPartitionToggleButton" aria-pressed="false" title="Enable distance-based grid cell streaming">World Stream: Off</button>
+        <select id="worldCellSizeSelect" aria-label="World cell size" title="World streaming cell size"><option value="32">32u cells</option><option value="64">64u cells</option><option value="128" selected>128u cells</option><option value="256">256u cells</option><option value="512">512u cells</option></select>
+        <select id="worldLoadRadiusSelect" aria-label="World streaming radius" title="Number of cell rings to load"><option value="0">Radius 0</option><option value="1">Radius 1</option><option value="2">Radius 2</option><option value="3" selected>Radius 3</option><option value="4">Radius 4</option><option value="6">Radius 6</option><option value="8">Radius 8</option></select>
+      </div>
+    </nav>
+    <main class="modeler-workspace">
+      <aside class="left-rail">
+        <section class="side-section outliner-section">
+          <div class="section-head"><div><span class="eyebrow">SCENE</span><h2>Outliner</h2></div><span class="count-chip" id="objectCount">0</span></div>
+          <div class="outliner-tools"><input id="outlinerSearch" placeholder="Filter objects…" aria-label="Filter objects"><button id="expandOutlinerButton" title="Clear filter">×</button></div>
+          <div id="outliner" class="outliner-list"></div>
+          <div class="left-hint">Shift-click to select multiple meshes. Double-tap an object name to rename it.</div>
+        </section>
+        <section class="side-section quick-tools-section">
+          <div class="section-head"><div><span class="eyebrow">WORKFLOW</span><h2>Quick Tools</h2></div></div>
+          <button class="quick-tool" data-quick-tool="subdivide"><span>◫</span><span><strong>Subdivide Mesh</strong><small>Add surface detail</small></span></button>
+          <button class="quick-tool" data-quick-tool="smooth"><span>≈</span><span><strong>Smooth Surface</strong><small>Relax vertex positions</small></span></button>
+          <button class="quick-tool" data-quick-tool="mirror"><span>◐</span><span><strong>Mirror X</strong><small>Symmetric duplicate</small></span></button>
+          <button class="quick-tool" data-quick-tool="uv"><span>▤</span><span><strong>Quick UV Layout</strong><small>Box-projected atlas</small></span></button>
+          <button class="quick-tool" data-quick-tool="cleanup"><span>✦</span><span><strong>Clean Mesh</strong><small>Remove bad triangles</small></span></button>
+        </section>
+        <section class="side-section kitbash-section">
+          <div class="section-head"><div><span class="eyebrow">KITBASH &amp; WORLDS</span><h2>Prefabs &amp; Moods</h2></div></div>
+          <div id="modelerPrefabRail" class="rail-chip-grid" aria-label="Prefab kitbash library"></div>
+          <div id="modelerMoodRail" class="rail-chip-grid" aria-label="Atmosphere moods"></div>
+          <div class="button-stack"><button id="modelerLatheRailButton">🏺 Lathe Vase</button><button id="modelerGeodesicRailButton">🔮 Geodesic Sphere</button><button id="modelerTerrainRailButton">⛰ Eroded Biome Terrain</button></div>
+        </section>
+        <footer class="left-footer"><span class="status-orbit"></span><span>Local-first · No API key</span></footer>
+      </aside>
+      <section class="viewport-panel">
+        <div class="viewport-head">
+          <div class="mode-tabs" role="group" aria-label="Modeling mode"><button data-mode="object" class="active" aria-pressed="true">Object</button><button data-mode="edit" aria-pressed="false">Edit</button><button data-mode="sculpt" aria-pressed="false">Sculpt</button></div>
+          <div class="viewport-controls"><button data-view="front" title="Front view">Front</button><button data-view="top" title="Top view">Top</button><button data-view="side" title="Side view">Side</button><button id="focusViewButton" title="Focus selected object (F)">Focus ↗</button><button id="gridToggleButton" class="active" aria-pressed="true">Grid</button></div>
+          <div class="edit-mode-tools" id="editModeTools" hidden aria-label="Mesh component editing">
+            <label>Element <select id="elementSelectionMode"><option value="vertex">Vertex</option><option value="edge">Edge</option><option value="face" selected>Face</option></select></label>
+            <span id="editSelectionCount" class="edit-selection-count">0 selected</span>
+            <div class="edit-vector-fields"><label>ΔX <input id="editMoveX" type="number" step="0.1" value="0"></label><label>ΔY <input id="editMoveY" type="number" step="0.1" value="0"></label><label>ΔZ <input id="editMoveZ" type="number" step="0.1" value="0"></label><button id="moveSelectedElementsButton" title="Move selected components by the entered offsets">Move</button></div>
+            <label>Extrude <input id="extrudeDistance" type="number" min="-100" max="100" step="0.1" value="0.25"></label><button id="extrudeFacesButton" title="Extrude selected faces along their normals">Extrude Faces</button>
+            <label>Inset <input id="insetFactor" type="number" min="0.01" max="0.95" step="0.01" value="0.15"></label><button id="insetFacesButton" title="Inset selected faces">Inset Faces</button>
+            <button id="splitEdgesButton" title="Split selected edges at midpoints">Split Edges</button><button id="loopCutButton" title="Loop cut the mesh with a mid-plane cut">Loop Cut</button><button id="pokeFacesButton" title="Poke selected faces (or all faces) into fan triangles">Poke Faces</button><button id="fillHolesButton" title="Fill boundary holes in the mesh">Fill Holes</button>
+            <button id="deleteFacesButton" title="Delete selected faces">Delete Faces</button>
+          </div>
+        </div>
+        <div class="viewport-stage" id="viewportStage">
+          <canvas id="modelerCanvas" aria-label="Interactive real-time 3D model viewport"></canvas>
+          <svg id="viewportOverlay" aria-hidden="true" preserveAspectRatio="none"><g id="wireframeLines"></g><circle id="sculptBrush" r="0" cx="-100" cy="-100"></circle></svg>
+          <div class="viewport-corner-tag"><span class="live-dot"></span> ORVEXA VIEWPORT <span class="render-chip">REALTIME</span></div>
+          <div class="viewport-axis"><span class="axis-x">X</span><span class="axis-y">Y</span><span class="axis-z">Z</span></div>
+          <div class="viewport-hint" id="viewportHint">Drag to orbit · Scroll to zoom · F to focus · G/R/S to edit transform</div>
+          <div class="viewport-fps" data-forge-perf-hud>Starting renderer…</div>
+          <div class="viewport-empty" id="rendererWarning" hidden><strong>WebGL renderer unavailable</strong><span>Enable hardware acceleration or open this page in a browser with WebGL support.</span></div>
+        </div>
+        <div class="sculpt-dock" id="sculptDock" hidden>
+          <div class="sculpt-info"><strong>Sculpt Brush</strong><span>Click and drag over the mesh</span></div>
+          <label>Brush <output id="brushRadiusValue">0.45</output><input id="brushRadius" type="range" min="0.05" max="2" step="0.05" value="0.45"></label>
+          <label>Strength <output id="brushStrengthValue">0.18</output><input id="brushStrength" type="range" min="0.02" max="0.8" step="0.01" value="0.18"></label>
+          <select id="sculptMode" aria-label="Sculpt mode"><option value="raise">Raise</option><option value="lower">Lower</option><option value="inflate">Inflate</option><option value="smooth">Smooth</option><option value="flatten">Flatten</option><option value="grab">Grab</option><option value="crease">Crease</option><option value="pinch">Pinch</option></select>
+          <label class="checkbox-line" style="margin:0"><input id="sculptSymmetryX" type="checkbox"><span>Symmetry X</span></label>
+          <button id="subdivideForSculpt">Add Sculpt Detail</button>
+        </div>
+        <div class="statusbar"><span id="selectionStatus">Cube selected</span><span class="status-divider"></span><span id="meshStats">12 triangles · 36 vertices</span><span class="status-spacer"></span><span id="modeStatus">Object Mode</span><span class="status-divider"></span><span id="worldPartitionStatus">World streaming off</span><span class="status-divider"></span><span>WebGL</span></div>
+      </section>
+      <aside class="right-rail">
+        <div class="inspector-title"><div><span class="eyebrow">PROPERTIES</span><h2 id="inspectorObjectTitle">Cube</h2></div><span class="selection-dot"></span></div>
+        <nav class="inspector-tabs" aria-label="Inspector tabs"><button data-inspector-tab="object" class="active">Object</button><button data-inspector-tab="material">Material</button><button data-inspector-tab="modifiers">Modifiers</button><button data-inspector-tab="uv">UV / Mesh</button><button data-inspector-tab="apex">Apex</button><button data-inspector-tab="ai">🤖 AI</button></nav>
+        <div class="inspector-content">
+          <section class="inspector-page" data-inspector-page="object">
+            <div class="prop-group"><div class="prop-heading">TRANSFORM <button data-reset-transform title="Reset transform">Reset</button></div>
+              <div class="triple-field" data-transform-group="position"><label>Location X<input data-transform="position.x" type="number" step="0.1"></label><label>Y<input data-transform="position.y" type="number" step="0.1"></label><label>Z<input data-transform="position.z" type="number" step="0.1"></label></div>
+              <div class="triple-field" data-transform-group="rotation"><label>Rotate X°<input data-transform="rotation.x" type="number" step="5"></label><label>Y°<input data-transform="rotation.y" type="number" step="5"></label><label>Z°<input data-transform="rotation.z" type="number" step="5"></label></div>
+              <div class="triple-field" data-transform-group="scale"><label>Scale X<input data-transform="scale.x" type="number" min="0.01" step="0.1"></label><label>Y<input data-transform="scale.y" type="number" min="0.01" step="0.1"></label><label>Z<input data-transform="scale.z" type="number" min="0.01" step="0.1"></label></div>
+              <label class="wide-field">Object Name<input id="objectNameInput" maxlength="100" value="Cube"></label>
+              <label class="checkbox-line"><input id="objectVisibleInput" type="checkbox" checked><span>Visible in viewport and export</span></label>
+            </div>
+            <div class="prop-group" id="lightInspectorGroup" hidden><div class="prop-heading">LIGHT SETTINGS</div>
+              <label class="wide-field">Light Type<select id="lightTypeSelect"><option value="directional">Directional</option><option value="point">Point</option><option value="spot">Spot</option></select></label>
+              <label class="range-field">Intensity <output id="lightIntensityOutput">2.00</output><input id="lightIntensity" type="range" min="0" max="12" step="0.1" value="2"></label>
+              <label class="range-field">Range <output id="lightRangeOutput">24</output><input id="lightRange" type="range" min="1" max="80" step="1" value="24"></label>
+              <label class="color-field">Light Color<input id="lightColor" type="color" value="#fff0d6"></label>
+              <div class="triple-field" style="margin-top:12px"><label>Dir X<input id="lightDirX" type="number" step="0.1"></label><label>Dir Y<input id="lightDirY" type="number" step="0.1"></label><label>Dir Z<input id="lightDirZ" type="number" step="0.1"></label></div>
+              <label class="range-field">Spot Cone <output id="lightConeOutput">34°</output><input id="lightCone" type="range" min="8" max="88" step="1" value="34"></label>
+            </div>
+            <div class="prop-group" id="meshInfoGroup"><div class="prop-heading">MESH INFORMATION</div><div class="stats-grid"><div><span>Triangles</span><strong id="statTriangles">12</strong></div><div><span>Vertices</span><strong id="statVertices">36</strong></div><div><span>UV map</span><strong id="statUV">Missing</strong></div><div><span>Modifiers</span><strong id="statModifiers">0</strong></div></div></div>
+            <div class="prop-group"><div class="prop-heading">APPLY / BAKE</div><div class="button-grid"><button id="applyTransformsButton">Apply Transforms</button><button id="applyModifiersButton">Apply Modifiers</button><button id="smoothShadingButton">Smooth Shading</button><button id="flatShadingButton">Flat Shading</button></div></div>
+            <div class="prop-group"><div class="prop-heading">WORLD STUDIO ROLE <span class="mini-tag">AETHERFALL</span></div>
+              <p class="muted-note">Assign collision and interactive lore roles before publishing this asset to the Aetherfall open world.</p>
+              <label class="wide-field">Gameplay Role<select id="worldAssetRole"><option value="prop">Environment Prop</option><option value="landmark">Discoverable Landmark</option><option value="lore-shrine">Ancient Lore Waystone</option><option value="beacon-totem">Resonance Totem</option></select></label>
+              <label class="wide-field">Collision Mode<select id="worldAssetCollision"><option value="solid">Solid Collider</option><option value="platform">Walkable Platform</option><option value="none">Decorative (No Collision)</option></select></label>
+              <label class="wide-field">Inscription / Lore Text<input id="worldAssetLore" maxlength="220" placeholder="Optional lore revealed when inspected in Aetherfall…"></label>
+            </div>
+          </section>
+          <section class="inspector-page" data-inspector-page="material" hidden>
+            <div class="prop-group"><div class="prop-heading">SURFACE</div><label class="color-field">Base Color<input id="materialColor" type="color" value="#7965ff"></label>
+              <label class="range-field">Metallic <output id="metallicOutput">0.05</output><input id="materialMetallic" type="range" min="0" max="1" step="0.01" value="0.05"></label>
+              <label class="range-field">Roughness <output id="roughnessOutput">0.68</output><input id="materialRoughness" type="range" min="0.04" max="1" step="0.01" value="0.68"></label>
+              <label class="range-field">Clearcoat <output id="clearcoatOutput">0.00</output><input id="materialClearcoat" type="range" min="0" max="1" step="0.01" value="0"></label>
+              <label class="range-field">Emission <output id="emissiveOutput">0.00</output><input id="materialEmissive" type="range" min="0" max="2" step="0.01" value="0"></label>
+            </div>
+            <div class="prop-group"><div class="prop-heading">ORVEXA MATERIAL LAB <span class="mini-tag">NODE GRAPH</span></div>
+              <p class="muted-note">Evaluate a typed procedural shader graph and bake real BaseColor, Metallic-Roughness, Normal, and Emissive PNG textures directly onto the selected mesh.</p>
+              <label class="wide-field">Node Graph Preset<select id="materialGraphPreset"><option value="gilded-relic">Gilded Relic</option><option value="weathered-basalt">Weathered Basalt</option><option value="cyber-neon-grid">Cyber Neon Grid</option><option value="arcane-crystal">Arcane Crystal</option><option value="mossy-ruin">Mossy Ruin</option><option value="weathered-stone">Weathered Stone</option><option value="runed-bronze">Runed Bronze</option><option value="mossy-basalt">Mossy Basalt</option><option value="ember-magma">Ember Magma</option><option value="alpine-ice">Alpine Ice</option><option value="cyber-carbon-fiber">Cyber Carbon Fiber</option><option value="brushed-titanium">Brushed Titanium</option><option value="gold-filigree">Gold Filigree</option><option value="iridescent-car-paint">Iridescent Car Paint</option><option value="toxic-slime">Toxic Slime</option><option value="ancient-terracotta">Ancient Terracotta</option></select></label>
+              <label class="wide-field">Pattern Scale<input id="materialGraphScale" type="number" min="0.5" max="32" step="0.5" value="6"></label>
+              <button id="applyMaterialGraphButton" class="wide-button accent">Compile &amp; Bake Material Graph</button>
+              <div id="materialGraphSummary" class="uv-summary">No procedural node graph baked yet.</div><div id="materialGraphSvgPreview" class="node-svg-preview" aria-label="Material graph diagram"></div>
+            </div>
+            <div class="prop-group"><div class="prop-heading">TEXTURE MAPS <span class="mini-tag">PBR</span></div><p class="muted-note">Attach embedded PNG, JPEG or WebP textures. GLB export stores supported maps inside the asset.</p>
+              <label class="texture-row"><span><strong>Base Color</strong><small id="baseMapState">No texture</small></span><button data-texture="baseColorImage">Load</button><input data-texture-input="baseColorImage" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+              <label class="texture-row"><span><strong>Metallic / Roughness</strong><small id="mrMapState">No texture</small></span><button data-texture="metallicRoughnessImage">Load</button><input data-texture-input="metallicRoughnessImage" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+              <label class="texture-row"><span><strong>Normal</strong><small id="normalMapState">No texture</small></span><button data-texture="normalImage">Load</button><input data-texture-input="normalImage" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+              <label class="texture-row"><span><strong>Ambient Occlusion</strong><small id="aoMapState">No texture</small></span><button data-texture="aoImage">Load</button><input data-texture-input="aoImage" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+              <label class="texture-row"><span><strong>Emissive</strong><small id="emissiveMapState">No texture</small></span><button data-texture="emissiveImage">Load</button><input data-texture-input="emissiveImage" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+            </div>
+          </section>
+          <section class="inspector-page" data-inspector-page="modifiers" hidden>
+            <div class="prop-group"><div class="prop-heading">NON-DESTRUCTIVE STACK <span class="mini-tag" id="modifierCountChip">0</span></div>
+              <p class="muted-note">Modifiers evaluate from top to bottom. Disable or reorder them without losing the base mesh.</p>
+              <div id="modifierList" class="modifier-list"></div>
+              <label class="wide-field">Add Modifier<select id="modifierTypeSelect"><option value="subdivision">Subdivision</option><option value="mirror">Mirror</option><option value="array">Array</option><option value="solidify">Solidify</option><option value="bevel">Bevel</option><option value="smooth">Smooth</option><option value="displace">Displace</option><option value="optimize">Cleanup</option><option value="simpleDeform">Simple Deform (Twist/Bend/Taper)</option><option value="decimate">Decimate (Nanite QEM)</option><option value="remesh">Remesh (Voxel)</option><option value="wireframe">Wireframe</option><option value="wave">Wave</option></select></label><button id="addModifierButton" class="wide-button accent">+ Add to Stack</button>
+            </div>
+            <div class="prop-group" id="modifierSettingsGroup"><div class="prop-heading">MODIFIER SETTINGS</div><div id="modifierSettings"><p class="empty-note">Select a modifier to edit its settings.</p></div></div>
+            <div class="prop-group"><div class="prop-heading">GEOMETRY NODES STUDIO <span class="mini-tag">DAG</span></div>
+              <p class="muted-note">Build procedural assemblies from scatter, instancing, displacement, and merge node graphs.</p>
+              <label class="wide-field">Graph Preset<select id="geoNodePreset"><option value="crystal-cluster">Crystal Cluster</option><option value="alpine-grove">Alpine Grove</option><option value="ruined-colonnade">Ruined Colonnade</option><option value="pine-grove">Pine Grove</option><option value="ruin-colonade">Ruin Colonade</option><option value="stone-ring">Stone Ring</option><option value="spiral-staircase">Spiral Staircase</option><option value="sci-fi-truss-bridge">Sci-Fi Truss Bridge</option><option value="asteroid-belt">Asteroid Belt</option><option value="procedural-pagoda">Procedural Pagoda</option></select></label>
+              <div class="triple-field" style="grid-template-columns:1fr 1fr"><label>Scatter Count<input id="geoNodeCount" type="number" min="1" max="64" step="1" value="10"></label><label>Seed<input id="geoNodeSeed" type="number" min="1" max="99999" step="1" value="77"></label></div>
+              <button id="spawnGeoNodeButton" class="wide-button accent">Evaluate &amp; Spawn Procedural Mesh</button>
+              <div id="geoNodeSummary" class="uv-summary">Ready to evaluate procedural DAG.</div><div id="geoNodeSvgPreview" class="node-svg-preview" aria-label="Geometry node graph diagram"></div>
+            </div>
+          </section>
+          <section class="inspector-page" data-inspector-page="uv" hidden>
+            <div class="prop-group"><div class="prop-heading">UV MAP &amp; ISLANDS</div><p class="muted-note">Quick UV creates a box-projection atlas; Island Unwrap groups connected smooth regions into packed UV islands.</p><button id="generateUVButton" class="wide-button accent">Generate Quick UVs</button><button id="unwrapIslandsButton" class="wide-button">Unwrap UV Islands (Angle/Seam)</button><button id="inspectUVButton" class="wide-button">Inspect UV Coverage &amp; Bounds</button><button id="clearUVButton" class="wide-button">Clear UVs</button><div class="uv-preview-wrap"><canvas id="uvCanvas" width="360" height="360"></canvas><span id="uvEmptyLabel">No UV coordinates generated</span></div><div id="uvSummary" class="uv-summary">—</div></div>
+            <div class="prop-group"><div class="prop-heading">MESH &amp; TOPOLOGY OPERATIONS</div><div class="button-stack"><button id="subdivideMeshButton">Subdivide (apply)</button><button id="mirrorMeshButton">Mirror Duplicate X (apply)</button><button id="cleanupMeshButton">Clean Duplicate / Degenerate Faces</button><button id="smoothMeshButton">Smooth Mesh (apply)</button><button id="weldVerticesButton">Weld Close Vertices (0.015u)</button><button id="flipNormalsButton">Flip Face Normals</button><button id="recalcNormalsButton">Recalculate Outward Normals</button><button id="inspectTopologyButton">Inspect Manifold Topology</button></div><div id="topologySummary" class="uv-summary" style="margin-top:8px">Click Inspect Manifold Topology for diagnostics.</div></div>
+            <div class="prop-group"><div class="prop-heading">EXPORT SELECTED</div><div class="button-stack"><button data-export="glb">Export GLB / glTF</button><button data-export="obj">Export OBJ</button><button data-export="fbx">Export ASCII FBX</button></div></div>
+          </section>
+          <section class="inspector-page" data-inspector-page="apex" hidden>
+            <div class="prop-group"><div class="prop-heading">NANITE LOD &amp; MESH APEX <span class="mini-tag">v6.0</span></div>
+              <p class="muted-note">Quadric-error decimation, boolean CSG, Voronoi fracture and loop/poke/fill mesh surgery on the selected mesh.</p>
+              <div class="button-stack"><button id="naniteDecimateButton">Nanite Decimate 50% (QEM)</button><button id="fractureMeshButton">Voronoi Fracture</button></div>
+              <label class="wide-field">Boolean Operation<select id="booleanModeSelect"><option value="union">Union</option><option value="difference">Difference</option><option value="intersect">Intersect</option></select></label>
+              <button id="booleanMeshButton" class="wide-button">Boolean With Other Selected Mesh</button>
+              <div id="apexSummary" class="uv-summary">Apex mesh tools ready. Select a mesh to begin.</div>
+            </div>
+            <div class="prop-group"><div class="prop-heading">OMEGA MESH SURGERY <span class="mini-tag">v7.0</span></div>
+              <p class="muted-note">Catmull-Clark quad subdivision, lathe &amp; geodesic generators, edge-loop bridging, 3D Voronoi fracture with interior UVs, Nanite DAG stats and the Topology Doctor.</p>
+              <div class="button-stack"><button id="catmullClarkButton">Catmull-Clark Subdivide</button><button id="geodesicSphereButton">Add Geodesic Sphere</button><button id="latheVaseButton">Lathe Vase (profile revolve)</button><button id="bridgeLoopsButton">Bridge Two Edge Loops (demo)</button><button id="fracture3dButton">3D Voronoi Fracture + Interior UVs</button><button id="naniteDagStatsButton">Nanite Cluster DAG Stats</button><button id="topologyDoctorButton">🩺 Topology Doctor</button></div>
+              <div id="omegaMeshSummary" class="uv-summary">Omega mesh surgery ready.</div>
+            </div>
+            <div class="prop-group"><div class="prop-heading">LIVE VFX &amp; RIG IK</div>
+              <label class="wide-field">VFX Preset<select id="vfxPresetSelect"><option value="campfire-sparks">Campfire Sparks</option><option value="arcane-wisps">Arcane Wisps</option><option value="portal-vortex">Portal Vortex</option><option value="rain-mist">Rain Mist</option><option value="snowfall">Snowfall</option></select></label>
+              <button id="spawnVfxButton" class="wide-button accent">Spawn VFX Particle Mesh</button>
+              <button id="solveIkButton" class="wide-button">Solve Demo Rig IK (CCD)</button>
+              <div id="vfxSummary" class="uv-summary">No VFX spawned yet.</div>
+            </div>
+            <div class="prop-group"><div class="prop-heading">RENDER PIPELINE <span class="mini-tag">ACES · AgX · LUMEN GI · Bloom</span></div>
+              <label class="wide-field">Tone Mapping<select id="toneMappingSelect"><option value="aces">ACES Filmic</option><option value="agx">AgX</option><option value="filmic">Filmic</option></select></label>
+              <button id="applyToneMappingButton" class="wide-button accent">Apply Tone Mapping + Lumen GI + Bloom</button>
+              <div id="renderPipelineSummary" class="uv-summary">Renderer: ACES tone mapping, Lumen-style GI and Bloom ready.</div>
+            </div>
+          </section>
+        </div>
+        <section class="inspector-page" data-inspector-page="ai" hidden>
+            <div class="prop-group"><div class="prop-heading">🤖 OMNI-AGENT 3.0 <span class="mini-tag">v7.0</span></div>
+              <p class="muted-note">Describe a model in English, Hindi or Hinglish. The agent generates a runnable project, critiques quality and can erode terrain or preview a turntable sequence right here.</p>
+              <label class="wide-field">Agent Prompt<textarea id="modelerAiPrompt" rows="3" placeholder="e.g. ek crystal tower banao golden hour me">ek neon crystal tower banao</textarea></label>
+              <div class="button-stack"><button id="modelerAiGenerateButton">🤖 Generate Project Code</button><button id="modelerAiCritiqueButton">📊 Critique Selected Mesh</button><button id="modelerAiTerrainButton">⛰ Erode Terrain (Terrain Lab)</button><button id="modelerAiTurntableButton">🎬 Preview Turntable Sequence</button></div>
+              <div id="modelerAiOutput" class="uv-summary">Omni-Agent ready — 20 tools, offline, zero key.</div>
+              <div id="modelerSequencePreview" class="node-svg-preview" aria-label="Sequencer timeline preview"></div>
+            </div>
+          </section>
+        <div class="inspector-footer"><button id="helpButton">Shortcuts & Help</button><span>v7.0 · Omega Modeler</span></div>
+      </aside>
+    </main>
+    <div class="toast" id="modelerToast" role="status" aria-live="polite"></div>
+  </div>
+  <script type="module" src="./src/modeler.js"></script>
+</body>
+</html>
